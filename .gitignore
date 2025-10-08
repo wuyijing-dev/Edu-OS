@@ -1,0 +1,35 @@
+# 编译产物
+build/
+*.o
+*.bin
+*.elf
+*.iso
+*.img
+
+# 调试文件
+*.log
+qemu.log
+.gdb_history
+bochsout.txt
+
+# 编辑器和IDE
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+*.sublime-*
+.DS_Store
+
+# 临时文件
+*.tmp
+*.bak
+*.orig
+
+# 系统文件
+Thumbs.db
+desktop.ini
+
+# 依赖文件（如果有）
+*.d
+
