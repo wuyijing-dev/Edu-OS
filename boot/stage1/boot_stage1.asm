@@ -15,7 +15,7 @@
 LOADER_SEG      equ 0x0800      ; Stage 2加载到0x8000
 LOADER_OFFSET   equ 0x0000
 LOADER_SECTOR   equ 1           ; Stage 2起始扇区（紧跟MBR）
-LOADER_COUNT    equ 4           ; Stage 2占用4个扇区
+LOADER_COUNT    equ 8           ; Stage 2占用8个扇区（4KB，大内核加载器）
 
 start:
     ; 初始化段寄存器

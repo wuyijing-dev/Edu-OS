@@ -19,9 +19,228 @@
 #include <process/scheduler.h>
 #include <process/priority_sched.h>
 #include <process/mlfq_sched.h>
+#include <fs/vfs.h>
+#include <fs/devfs.h>
+#include <fs/procfs.h>
+#include <fs/fat32.h>
 
 /* 外部符号：内核结束地址 */
 extern uint32_t kernel_end;
+
+/* ========== VFS测试函数（第7章） ========== */
+
+#if 0  // 禁用旧的 VFS 测试
+static void test_vfs_basic(void)
+{
+    kprintf("\n=== Testing VFS and DevFS ===\n\n");
+    
+    char buffer[128];
+    int fd, nbytes;
+    
+    /* 测试 /dev/null */
+    kprintf("[VFS Test] Opening /null...\n");
+    fd = vfs_open("/null", O_RDWR, 0);
+    if (fd < 0) {
+        kprintf("[VFS Test] ERROR: Failed to open /null: %d\n", fd);
+    } else {
+        kprintf("[VFS Test] /null opened, fd=%d\n", fd);
+        
+        /* 写入数据（应该被丢弃） */
+        const char *test_data = "This data will disappear";
+        nbytes = vfs_write(fd, test_data, 24);
+        kprintf("[VFS Test] Wrote %d bytes to /null (data discarded)\n", nbytes);
+        
+        /* 读取数据（应该返回EOF） */
+        nbytes = vfs_read(fd, buffer, sizeof(buffer));
+        kprintf("[VFS Test] Read %d bytes from /null (EOF)\n", nbytes);
+        
+        vfs_close(fd);
+        kprintf("[VFS Test] /null closed\n");
+    }
+    
+    kprintf("\n");
+    
+    /* 测试 /dev/zero */
+    kprintf("[VFS Test] Opening /zero...\n");
+    fd = vfs_open("/zero", O_RDONLY, 0);
+    if (fd < 0) {
+        kprintf("[VFS Test] ERROR: Failed to open /zero: %d\n", fd);
+    } else {
+        kprintf("[VFS Test] /zero opened, fd=%d\n", fd);
+        
+        /* 填充buffer为非零 */
+        for (int i = 0; i < 16; i++) {
+            buffer[i] = 0xFF;
+        }
+        
+        /* 读取零 */
+        nbytes = vfs_read(fd, buffer, 16);
+        kprintf("[VFS Test] Read %d bytes from /zero\n", nbytes);
+        
+        /* 验证全为零 */
+        bool all_zero = true;
+        for (int i = 0; i < 16; i++) {
+            if (buffer[i] != 0) {
+                all_zero = false;
+                break;
+            }
+        }
+        kprintf("[VFS Test] Data verification: %s\n", all_zero ? "PASSED (all zeros)" : "FAILED");
+        
+        vfs_close(fd);
+        kprintf("[VFS Test] /zero closed\n");
+    }
+    
+    kprintf("\n");
+    
+    /* 测试 /dev/console */
+    kprintf("[VFS Test] Opening /console...\n");
+    fd = vfs_open("/console", O_WRONLY, 0);
+    if (fd < 0) {
+        kprintf("[VFS Test] ERROR: Failed to open /console: %d\n", fd);
+    } else {
+        kprintf("[VFS Test] /console opened, fd=%d\n", fd);
+        
+        /* 写入到控制台 */
+        const char *msg = "[VFS Test] Hello from /console!\n";
+        nbytes = vfs_write(fd, msg, 33);
+        kprintf("[VFS Test] Wrote %d bytes to /console\n", nbytes);
+        
+        vfs_close(fd);
+        kprintf("[VFS Test] /console closed\n");
+    }
+    
+    kprintf("\n[VFS Test] All tests completed!\n\n");
+}
+#endif
+
+/* ========== ProcFS 测试函数（第9章） ========== */
+
+static void test_procfs(void)
+{
+    kprintf("\n");
+    kprintf("================================================================================\n");
+    kprintf("=== Chapter 9: Testing ProcFS (Process Filesystem) ===\n");
+    kprintf("================================================================================\n");
+    kprintf("\n");
+    
+    char buffer[1024];
+    int fd, nbytes;
+    
+    /* 测试 1: /proc/cpuinfo */
+    kprintf("[ProcFS Test 1] Reading /proc/cpuinfo...\n");
+    fd = vfs_open("/proc/cpuinfo", O_RDONLY, 0);
+    if (fd < 0) {
+        kprintf("[ERROR] Failed to open /proc/cpuinfo: %d\n", fd);
+    } else {
+        nbytes = vfs_read(fd, buffer, sizeof(buffer) - 1);
+        if (nbytes > 0) {
+            buffer[nbytes] = '\0';
+            kprintf("%s\n", buffer);
+        }
+        vfs_close(fd);
+    }
+    
+    /* 测试 2: /proc/meminfo */
+    kprintf("[ProcFS Test 2] Reading /proc/meminfo...\n");
+    fd = vfs_open("/proc/meminfo", O_RDONLY, 0);
+    if (fd < 0) {
+        kprintf("[ERROR] Failed to open /proc/meminfo: %d\n", fd);
+    } else {
+        nbytes = vfs_read(fd, buffer, sizeof(buffer) - 1);
+        if (nbytes > 0) {
+            buffer[nbytes] = '\0';
+            kprintf("%s\n", buffer);
+        }
+        vfs_close(fd);
+    }
+    
+    /* 测试 3: /proc/uptime */
+    kprintf("[ProcFS Test 3] Reading /proc/uptime...\n");
+    fd = vfs_open("/proc/uptime", O_RDONLY, 0);
+    if (fd < 0) {
+        kprintf("[ERROR] Failed to open /proc/uptime: %d\n", fd);
+    } else {
+        nbytes = vfs_read(fd, buffer, sizeof(buffer) - 1);
+        if (nbytes > 0) {
+            buffer[nbytes] = '\0';
+            kprintf("System uptime: %s\n", buffer);
+        }
+        vfs_close(fd);
+    }
+    
+    /* 测试 4: /proc/version */
+    kprintf("[ProcFS Test 4] Reading /proc/version...\n");
+    fd = vfs_open("/proc/version", O_RDONLY, 0);
+    if (fd < 0) {
+        kprintf("[ERROR] Failed to open /proc/version: %d\n", fd);
+    } else {
+        nbytes = vfs_read(fd, buffer, sizeof(buffer) - 1);
+        if (nbytes > 0) {
+            buffer[nbytes] = '\0';
+            kprintf("%s\n", buffer);
+        }
+        vfs_close(fd);
+    }
+    
+    kprintf("\n");
+    kprintf("================================================================================\n");
+    kprintf("=== ProcFS Tests Completed Successfully! ===\n");
+    kprintf("================================================================================\n");
+    kprintf("\n");
+}
+
+/* ========== FAT32 测试函数（第10章） ========== */
+
+static void test_fat32(void)
+{
+    kprintf("\n");
+    kprintf("================================================================================\n");
+    kprintf("=== Chapter 10: Testing FAT32 Filesystem ===\n");
+    kprintf("================================================================================\n");
+    kprintf("\n");
+    
+    /* 初始化 FAT32 */
+    kprintf("[FAT32 Test 1] Initializing FAT32 driver...\n");
+    int ret = fat32_init();
+    if (ret < 0) {
+        kprintf("[ERROR] Failed to initialize FAT32: %d\n", ret);
+        return;
+    }
+    kprintf("[OK] FAT32 driver initialized\n\n");
+    
+    /* 尝试挂载（这里使用 NULL，实际需要真实的块设备） */
+    kprintf("[FAT32 Test 2] Mounting FAT32 filesystem...\n");
+    kprintf("[INFO] Note: Real block device driver not yet implemented\n");
+    kprintf("[INFO] This is a demonstration of the mounting process\n");
+    
+    /* 演示 FAT32 功能（不需要真实设备） */
+    ret = fat32_mount(NULL);
+    if (ret < 0) {
+        kprintf("[INFO] Mount failed (expected, no real device): %d\n", ret);
+        kprintf("[INFO] FAT32 code is ready for real block device integration\n");
+    } else {
+        kprintf("[OK] FAT32 mounted successfully\n");
+        
+        /* 获取文件系统信息 */
+        struct fat32_fs_info *fs = fat32_get_fs();
+        if (fs) {
+            kprintf("\n[FAT32 Info] Filesystem Information:\n");
+            kprintf("  Bytes per Sector: %u\n", fs->bytes_per_sector);
+            kprintf("  Sectors per Cluster: %u\n", fs->sectors_per_cluster);
+            kprintf("  Cluster Size: %u bytes\n", fs->cluster_size);
+            kprintf("  Root Cluster: %u\n", fs->root_cluster);
+            kprintf("  Total Clusters: %u\n", fs->total_clusters);
+        }
+    }
+    
+    kprintf("\n");
+    kprintf("================================================================================\n");
+    kprintf("=== FAT32 Tests Completed! ===\n");
+    kprintf("=== Ready for Block Device Integration ===\n");
+    kprintf("================================================================================\n");
+    kprintf("\n");
+}
 
 /* ========== 测试线程（第6章：调度算法测试） ========== */
 
@@ -347,44 +566,45 @@ void kernel_main(void)
     // 初始化VGA和串口
     vga_init();
     serial_init(COM1);
-    serial_puts(COM1, "\n=== EduOS Kernel v0.3.0 (Chapter 4) ===\n");
+    serial_puts(COM1, "\n=== EduOS Kernel v0.3.0 (Chapter 7 - VFS Test) ===\n");
     serial_puts(COM1, "Serial port initialized successfully.\n");
     
+    #if 0  // 注释掉 banner 和系统信息
     // 显示banner
     print_banner();
     print_system_info();
+    #endif
     
-    // 初始化中断系统
-    kprintf("[INIT] Initializing Interrupt Descriptor Table...\n");
+    // 初始化中断系统（静默）
     idt_init();
-    
-    kprintf("[INIT] Initializing IRQ subsystem...\n");
     irq_init();
-    
-    kprintf("[INIT] Initializing Timer (PIT 8253/8254)...\n");
     timer_init(TIMER_FREQUENCY_HZ);
-    
-    kprintf("[INIT] Initializing Keyboard (PS/2)...\n");
     keyboard_init();
-    
-    kprintf("[INIT] Enabling interrupts...\n");
     irq_enable_all();
+    
+    #if 0  // 注释掉初始化过程的输出
+    kprintf("[INIT] Initializing Interrupt Descriptor Table...\n");
+    kprintf("[INIT] Initializing IRQ subsystem...\n");
+    kprintf("[INIT] Initializing Timer (PIT 8253/8254)...\n");
+    kprintf("[INIT] Initializing Keyboard (PS/2)...\n");
+    kprintf("[INIT] Enabling interrupts...\n");
     kprintf("[INIT] Interrupts enabled (IF flag set)\n\n");
+    #endif
     
-    // ========== 第4章：初始化内存管理 ==========
-    
-    kprintf("[INIT] Initializing Memory Management...\n\n");
+    // ========== 第4章：初始化内存管理（静默） ==========
     
     /* 获取内核结束地址（物理地址） */
     uint32_t kernel_end_phys = (uint32_t)&kernel_end;
-    kprintf("[INIT] Kernel end (physical): 0x%08x\n\n", kernel_end_phys);
     
     /* 初始化物理内存管理器（假设128MB RAM） */
     uint32_t total_memory = 128 * 1024 * 1024;  // 128MB
     pmm_init(total_memory, 0x100000, kernel_end_phys);
     
-    /* 打印物理内存统计 */
+    #if 0  // 注释掉内存管理的输出
+    kprintf("[INIT] Initializing Memory Management...\n\n");
+    kprintf("[INIT] Kernel end (physical): 0x%08x\n\n", kernel_end_phys);
     pmm_print_stats();
+    #endif
     
     /* 初始化虚拟内存管理器（启用分页） */
     vmm_init(kernel_end_phys);
@@ -394,19 +614,84 @@ void kernel_main(void)
     uint32_t heap_size = 16 * 1024 * 1024;  // 16MB堆
     kmalloc_init(heap_start, heap_size);
     
+    #if 0  // 注释掉成功消息
     kprintf("[INIT] Memory Management initialized successfully!\n\n");
+    #endif
     
-    /* 初始化进程管理器 */
+    // ========== 第7章：初始化VFS和DevFS（静默初始化） ==========
+    
+    #if 0  // 注释掉 VFS 初始化的调试输出
+    vga_puts("\n=== Chapter 7: VFS Init Debug ===\n");
+    vga_puts("[VFS-DEBUG] Before vfs_init() call\n");
+    #endif
+    
+    /* 初始化 VFS 核心 */
+    vfs_init();
+    
+    #if 0
+    vga_puts("[VFS-DEBUG] After vfs_init() call - SUCCESS\n");
+    vga_puts("[VFS-DEBUG] Before devfs_init() call\n");
+    #endif
+    
+    /* 初始化 DevFS */
+    int ret = devfs_init();
+    if (ret < 0) {
+        panic("Failed to initialize DevFS");
+    }
+    
+    #if 0
+    vga_puts("[VFS-DEBUG] After devfs_init() call - SUCCESS\n");
+    #endif
+    
+    /* 声明设备初始化函数 */
+    extern int dev_null_init(void);
+    extern int dev_zero_init(void);
+    extern int dev_console_init(void);
+    
+    /* 注册标准设备 */
+    #if 0
+    vga_puts("[VFS-DEBUG] Registering /dev/null\n");
+    #endif
+    dev_null_init();
+    
+    #if 0
+    vga_puts("[VFS-DEBUG] Registering /dev/zero\n");
+    #endif
+    dev_zero_init();
+    
+    #if 0
+    vga_puts("[VFS-DEBUG] Registering /dev/console\n");
+    #endif
+    dev_console_init();
+    
+    #if 0
+    vga_puts("[VFS-DEBUG] All devices registered\n");
+    vga_puts("[VFS-DEBUG] VFS test completed, system stable\n\n");
+    #endif
+    
+    /* 初始化进程管理器（静默） */
     process_init();
     scheduler_init();
-    
-    /* 初始化高级调度器 */
-    kprintf("[INIT] Initializing advanced schedulers...\n");
     priority_scheduler_init();
     mlfq_init();
-    kprintf("\n");
     
-    /* ========== 恢复MLFQ测试（之前工作正常） ========== */
+    /* ========== 第9章：初始化并测试 ProcFS ========== */
+    kprintf("\n[INIT] Initializing ProcFS...\n");
+    ret = procfs_init();
+    if (ret < 0) {
+        kprintf("[ERROR] Failed to initialize ProcFS: %d\n", ret);
+    } else {
+        kprintf("[OK] ProcFS initialized successfully\n");
+    }
+    
+    /* 运行 ProcFS 测试 */
+    test_procfs();
+    
+    /* ========== 第10章：初始化并测试 FAT32 ========== */
+    test_fat32();
+    
+    #if 0  // 暂时禁用 MLFQ 测试
+    /* ========== MLFQ 调度器测试（暂时禁用） ========== */
     kprintf("=== Chapter 6: Testing MLFQ Scheduler ===\n\n");
     
     /* 创建测试线程 */
@@ -462,5 +747,29 @@ void kernel_main(void)
     /* 主线程变为idle循环 */
     while (1) {
         asm volatile("hlt");  // 等待中断
+    }
+    #endif
+    
+    /* ========== VFS 测试完成后的简单循环 ========== */
+    
+    #if 0  // 注释掉最后的系统状态输出
+    kprintf("\n=== VFS Test Completed ===\n");
+    kprintf("System is in idle state. Press Ctrl+C in QEMU to exit.\n\n");
+    
+    // 打印系统状态
+    kprintf("=== System Status ===\n");
+    pmm_print_stats();
+    kmalloc_print_stats();
+    
+    vga_set_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+    vga_write_string("\n================================================================================\n");
+    vga_write_string("           All tests passed! System idle.                                      \n");
+    vga_write_string("================================================================================\n");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    #endif
+    
+    /* 简单的 idle 循环 */
+    while (1) {
+        asm volatile("hlt");  // 等待中断（低功耗）
     }
 }

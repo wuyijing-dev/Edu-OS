@@ -215,6 +215,95 @@ void panic(const char *msg)
 /*
  * 格式化输出到缓冲区（类似snprintf）
  */
+int snprintf(char *buf, size_t size, const char *fmt, ...)
+{
+    __builtin_va_list args;
+    __builtin_va_start(args, fmt);
+    
+    if (!buf || size == 0 || !fmt) {
+        __builtin_va_end(args);
+        return 0;
+    }
+    
+    char *p = buf;
+    size_t written = 0;
+    char temp_buffer[32];
+    
+    while (*fmt && written < size - 1) {
+        if (*fmt == '%') {
+            fmt++;
+            switch (*fmt) {
+                case 's': {
+                    const char *s = __builtin_va_arg(args, const char *);
+                    if (s) {
+                        while (*s && written < size - 1) {
+                            *p++ = *s++;
+                            written++;
+                        }
+                    }
+                    break;
+                }
+                case 'd':
+                case 'i': {
+                    int num = __builtin_va_arg(args, int);
+                    itoa_internal(num, temp_buffer, 10, 1);
+                    const char *s = temp_buffer;
+                    while (*s && written < size - 1) {
+                        *p++ = *s++;
+                        written++;
+                    }
+                    break;
+                }
+                case 'u': {
+                    unsigned int num = __builtin_va_arg(args, unsigned int);
+                    itoa_internal(num, temp_buffer, 10, 0);
+                    const char *s = temp_buffer;
+                    while (*s && written < size - 1) {
+                        *p++ = *s++;
+                        written++;
+                    }
+                    break;
+                }
+                case 'x': {
+                    unsigned int num = __builtin_va_arg(args, unsigned int);
+                    itoa_internal(num, temp_buffer, 16, 0);
+                    const char *s = temp_buffer;
+                    while (*s && written < size - 1) {
+                        *p++ = *s++;
+                        written++;
+                    }
+                    break;
+                }
+                case 'c': {
+                    char c = (char)__builtin_va_arg(args, int);
+                    if (written < size - 1) {
+                        *p++ = c;
+                        written++;
+                    }
+                    break;
+                }
+                case '%': {
+                    if (written < size - 1) {
+                        *p++ = '%';
+                        written++;
+                    }
+                    break;
+                }
+                default:
+                    break;
+            }
+            fmt++;
+        } else {
+            *p++ = *fmt++;
+            written++;
+        }
+    }
+    
+    *p = '\0';
+    __builtin_va_end(args);
+    return written;
+}
+
 int ksnprintf(char *buf, size_t size, const char *fmt, ...)
 {
     if (!buf || size == 0 || !fmt) {

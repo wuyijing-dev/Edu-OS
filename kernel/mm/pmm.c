@@ -264,6 +264,22 @@ void pmm_get_stats(struct pmm_stats *stats)
 }
 
 /*
+ * 获取总内存大小（字节）
+ */
+uint32_t pmm_get_total_memory(void)
+{
+    return memory_size;
+}
+
+/*
+ * 获取空闲内存大小（字节）
+ */
+uint32_t pmm_get_free_memory(void)
+{
+    return pmm_stats.free_frames * PAGE_SIZE;
+}
+
+/*
  * 打印内存映射信息
  */
 void pmm_print_memory_map(void)

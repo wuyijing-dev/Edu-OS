@@ -104,6 +104,7 @@ struct process *process_create_kernel_thread(const char *name, void (*entry)(voi
 void process_destroy(struct process *proc);
 void process_exit(uint32_t exit_code) __attribute__((noreturn));
 struct process *process_get_current(void);
+struct process *process_find_by_pid(pid_t pid);
 void process_set_current(struct process *proc);
 uint32_t process_allocate_pid(void);
 

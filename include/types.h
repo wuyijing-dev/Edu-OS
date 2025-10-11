@@ -18,6 +18,13 @@ typedef int32_t  ssize_t;
 typedef uint32_t uintptr_t;
 typedef int32_t  intptr_t;
 
+/* 文件系统相关类型 */
+typedef int32_t  off_t;      /* 文件偏移量 */
+typedef uint32_t mode_t;     /* 文件权限模式 */
+typedef uint32_t pid_t;      /* 进程 ID */
+typedef uint32_t uid_t;      /* 用户 ID */
+typedef uint32_t gid_t;      /* 组 ID */
+
 /* 布尔类型 */
 typedef int bool;
 #define true  1

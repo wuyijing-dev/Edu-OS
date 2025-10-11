@@ -301,3 +301,20 @@ void process_set_current(struct process *proc)
     (void)proc;
 }
 
+/*
+ * 根据 PID 查找进程
+ */
+struct process *process_find_by_pid(pid_t pid)
+{
+    struct process *proc = process_list_head;
+    
+    while (proc) {
+        if (proc->pid == pid) {
+            return proc;
+        }
+        proc = proc->next;
+    }
+    
+    return NULL;
+}
+

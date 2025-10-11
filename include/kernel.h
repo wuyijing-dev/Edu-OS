@@ -63,6 +63,7 @@ void panic(const char *msg) __attribute__((noreturn));
 // 格式化输出（类似printf）
 void kprintf(const char *fmt, ...);
 void kvprintf(const char *fmt, __builtin_va_list args);
+int snprintf(char *buf, size_t size, const char *fmt, ...);
 int ksnprintf(char *buf, size_t size, const char *fmt, ...);
 
 #endif // KERNEL_H

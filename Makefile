@@ -55,6 +55,21 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/process/scheduler.c \
 	$(KERNEL_DIR)/process/priority_sched.c \
 	$(KERNEL_DIR)/process/mlfq_sched.c \
+	$(KERNEL_DIR)/fs/vfs_core.c \
+	$(KERNEL_DIR)/fs/devfs.c \
+	$(KERNEL_DIR)/fs/dev_null.c \
+	$(KERNEL_DIR)/fs/dev_zero.c \
+	$(KERNEL_DIR)/fs/dev_console.c \
+	$(KERNEL_DIR)/fs/procfs.c \
+	$(KERNEL_DIR)/fs/proc_cpuinfo.c \
+	$(KERNEL_DIR)/fs/proc_meminfo.c \
+	$(KERNEL_DIR)/fs/proc_uptime.c \
+	$(KERNEL_DIR)/fs/proc_version.c \
+	$(KERNEL_DIR)/fs/proc_pid.c \
+	$(KERNEL_DIR)/fs/fat32.c \
+	$(KERNEL_DIR)/fs/fat32_dir.c \
+	$(KERNEL_DIR)/fs/fat32_file.c \
+	$(KERNEL_DIR)/fs/fat32_lfn.c \
 	$(LIB_DIR)/string.c \
 	$(LIB_DIR)/libgcc_compat.c
 
@@ -107,13 +122,18 @@ $(BOOT_STAGE1_BIN): $(BOOT_STAGE1_ASM) | $(BUILD_DIR)
 	@echo -e "$(GREEN)✓ Stage 1 编译完成 (512字节)$(NC)"
 
 # ===========================================================================
-# Stage 2: 加载器 (切换到保护模式)
+# Stage 2: 加载器 (切换到保护模式) - 现在是 4KB（8个扇区）
 # ===========================================================================
 $(BOOT_STAGE2_BIN): $(BOOT_STAGE2_ASM) | $(BUILD_DIR)
-	@echo -e "$(BLUE)编译 Stage 2 (Loader)...$(NC)"
+	@echo -e "$(BLUE)编译 Stage 2 (Big Kernel Loader)...$(NC)"
 	$(AS) $(ASFLAGS_BIN) $< -o $@
 	@size=$$(stat -c%s $@); \
-	echo -e "$(GREEN)✓ Stage 2 编译完成 ($$size字节)$(NC)"
+	sectors=$$((size / 512)); \
+	echo -e "$(GREEN)✓ Stage 2 编译完成 ($$size字节, $$sectors个扇区)$(NC)"; \
+	if [ $$size -gt 4096 ]; then \
+		echo -e "$(RED)错误: Stage 2 大小超过 4096 字节！$(NC)"; \
+		exit 1; \
+	fi
 
 # ===========================================================================
 # 内核入口和中断处理 (汇编)
@@ -216,6 +236,69 @@ $(BUILD_DIR)/mlfq_sched.o: $(KERNEL_DIR)/process/mlfq_sched.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (MLFQ Scheduler)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
+# 第7章新增的VFS和DevFS文件
+$(BUILD_DIR)/vfs_core.o: $(KERNEL_DIR)/fs/vfs_core.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (VFS Core)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/devfs.o: $(KERNEL_DIR)/fs/devfs.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (DevFS)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/dev_null.o: $(KERNEL_DIR)/fs/dev_null.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (/dev/null)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/dev_zero.o: $(KERNEL_DIR)/fs/dev_zero.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (/dev/zero)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/dev_console.o: $(KERNEL_DIR)/fs/dev_console.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (/dev/console)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# 第9章新增的ProcFS文件
+$(BUILD_DIR)/procfs.o: $(KERNEL_DIR)/fs/procfs.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (ProcFS Core)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/proc_cpuinfo.o: $(KERNEL_DIR)/fs/proc_cpuinfo.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (/proc/cpuinfo)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/proc_meminfo.o: $(KERNEL_DIR)/fs/proc_meminfo.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (/proc/meminfo)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/proc_uptime.o: $(KERNEL_DIR)/fs/proc_uptime.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (/proc/uptime)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/proc_version.o: $(KERNEL_DIR)/fs/proc_version.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (/proc/version)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/proc_pid.o: $(KERNEL_DIR)/fs/proc_pid.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (/proc/[pid])$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# 第10章新增的FAT32文件
+$(BUILD_DIR)/fat32.o: $(KERNEL_DIR)/fs/fat32.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (FAT32 Core)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/fat32_dir.o: $(KERNEL_DIR)/fs/fat32_dir.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (FAT32 Directory)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/fat32_file.o: $(KERNEL_DIR)/fs/fat32_file.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (FAT32 File Ops)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/fat32_lfn.o: $(KERNEL_DIR)/fs/fat32_lfn.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (FAT32 Long Filename)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
 # ===========================================================================
 # 链接内核ELF
 # ===========================================================================
@@ -234,31 +317,40 @@ $(KERNEL_BIN): $(KERNEL_ELF) | $(BUILD_DIR)
 	echo -e "$(GREEN)✓ 内核二进制提取完成 ($$size字节)$(NC)"
 
 # ===========================================================================
-# 创建最终OS镜像
+# 创建最终OS镜像（支持大内核）
 # ===========================================================================
 $(OS_IMG): $(BOOT_STAGE1_BIN) $(BOOT_STAGE2_BIN) $(KERNEL_BIN) | $(BUILD_DIR)
 	@echo -e "$(YELLOW)=========================================$(NC)"
-	@echo -e "$(YELLOW) 创建 EduOS 启动镜像$(NC)"
+	@echo -e "$(YELLOW) 创建 EduOS 启动镜像（大内核支持）$(NC)"
 	@echo -e "$(YELLOW)=========================================$(NC)"
 	
-	# 创建1.44MB软盘镜像
-	dd if=/dev/zero of=$@ bs=512 count=2880 2>/dev/null
+	# 检查内核大小
+	@kernel_size=$$(stat -c%s $(KERNEL_BIN)); \
+	kernel_mb=$$((kernel_size / 1048576)); \
+	echo -e "$(CYAN)内核大小: $$kernel_size 字节 (~$$kernel_mb MB)$(NC)"; \
+	if [ $$kernel_size -gt 4194304 ]; then \
+		echo -e "$(RED)警告: 内核超过4MB，可能需要调整加载器$(NC)"; \
+	fi
+	
+	# 创建8MB磁盘镜像（足够大内核使用）
+	dd if=/dev/zero of=$@ bs=1M count=8 2>/dev/null
 	
 	# 写入Stage 1（扇区0）
 	dd if=$(BOOT_STAGE1_BIN) of=$@ conv=notrunc bs=512 seek=0 2>/dev/null
 	
-	# 写入Stage 2（扇区1-4）
+	# 写入Stage 2（扇区1-8，共4KB）
 	dd if=$(BOOT_STAGE2_BIN) of=$@ conv=notrunc bs=512 seek=1 2>/dev/null
 	
-	# 写入内核（扇区5+）
-	dd if=$(KERNEL_BIN) of=$@ conv=notrunc seek=5 bs=512 2>/dev/null
+	# 写入内核（扇区9+）
+	dd if=$(KERNEL_BIN) of=$@ conv=notrunc seek=9 bs=512 2>/dev/null
 	
 	@echo -e "$(GREEN)=========================================$(NC)"
 	@echo -e "$(GREEN)✓ 磁盘镜像创建完成$(NC)"
 	@echo -e "$(CYAN)镜像布局:$(NC)"
-	@echo -e "$(CYAN)  扇区 0:   Stage 1 引导扇区 (512字节)$(NC)"
-	@echo -e "$(CYAN)  扇区 1-4: Stage 2 加载器$(NC)"
-	@echo -e "$(CYAN)  扇区 5+:  内核$(NC)"
+	@echo -e "$(CYAN)  扇区 0:     Stage 1 引导扇区 (512字节)$(NC)"
+	@echo -e "$(CYAN)  扇区 1-8:   Stage 2 大内核加载器 (4KB, Unreal模式)$(NC)"
+	@echo -e "$(CYAN)  扇区 9+:    内核（支持2MB-4MB）$(NC)"
+	@echo -e "$(CYAN)  总容量:     8MB$(NC)"
 	@echo -e "$(GREEN)=========================================$(NC)"
 
 # ===========================================================================
@@ -266,12 +358,12 @@ $(OS_IMG): $(BOOT_STAGE1_BIN) $(BOOT_STAGE2_BIN) $(KERNEL_BIN) | $(BUILD_DIR)
 # ===========================================================================
 run: $(OS_IMG)
 	@echo -e "$(YELLOW)=========================================$(NC)"
-	@echo -e "$(YELLOW) 启动 EduOS (Chapter 4)$(NC)"
+	@echo -e "$(YELLOW) 启动 EduOS (大内核支持)$(NC)"
 	@echo -e "$(YELLOW)=========================================$(NC)"
-	@echo -e "$(CYAN)提示：内存管理系统已启用$(NC)"
-	@echo -e "$(CYAN)      分页机制、物理内存管理、动态内存分配$(NC)"
+	@echo -e "$(CYAN)提示：使用硬盘模式 + Unreal模式加载器$(NC)"
+	@echo -e "$(CYAN)      支持 2MB-4MB 大内核$(NC)"
 	@echo ""
-	$(QEMU) -drive format=raw,file=$(OS_IMG),if=floppy \
+	$(QEMU) -drive format=raw,file=$(OS_IMG),if=ide,index=0 \
 		-serial stdio -m 128M
 
 # ===========================================================================
@@ -287,7 +379,7 @@ debug: $(OS_IMG)
 	@echo -e "$(CYAN)  3. 设置断点: break kernel_main$(NC)"
 	@echo -e "$(CYAN)  4. 继续执行: continue$(NC)"
 	@echo ""
-	$(QEMU) -drive format=raw,file=$(OS_IMG),if=floppy \
+	$(QEMU) -drive format=raw,file=$(OS_IMG),if=ide,index=0 \
 		-serial stdio -m 128M -s -S
 
 # ===========================================================================

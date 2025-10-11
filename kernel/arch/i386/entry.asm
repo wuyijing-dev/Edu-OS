@@ -15,6 +15,10 @@ global _start
 section .text
 
 _start:
+    ; 立即在VGA显示一个字符，证明内核入口被调用
+    ; 使用物理地址0xB8000（通过低端恒等映射）
+    mov dword [0xB8000], 0x0F4B0F4B  ; 'KK' 白字黑底
+    
     ; 设置段寄存器
     mov ax, 0x10
     mov ds, ax
@@ -23,16 +27,25 @@ _start:
     mov gs, ax
     mov ss, ax
     
+    ; 再显示一个字符，证明段寄存器设置成功
+    mov dword [0xB8004], 0x0F450F45  ; 'EE' 白字黑底
+    
     ; 设置内核栈（使用内核BSS段中的栈空间）
     mov esp, kernel_stack_top
     mov ebp, esp
+    
+    ; 显示第三个字符，证明栈设置成功
+    mov dword [0xB8008], 0x0F520F52  ; 'RR' 白字黑底
     
     ; 清除EFLAGS
     push 0
     popfd
     
-    ; 显示内核横幅
-    call display_kernel_banner
+    ; 跳过横幅，直接调用kernel_main
+    ; call display_kernel_banner
+    
+    ; 显示第四个字符，准备调用kernel_main
+    mov dword [0xB800C], 0x0F4E0F4E  ; 'NN' 白字黑底
     
     ; 调用C语言内核主函数
     call kernel_main

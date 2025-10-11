@@ -122,6 +122,16 @@ bool pmm_is_frame_used(uint32_t frame_addr);
 void pmm_get_stats(struct pmm_stats *stats);
 
 /*
+ * 获取总内存大小（字节）
+ */
+uint32_t pmm_get_total_memory(void);
+
+/*
+ * 获取空闲内存大小（字节）
+ */
+uint32_t pmm_get_free_memory(void);
+
+/*
  * 打印内存映射信息
  */
 void pmm_print_memory_map(void);

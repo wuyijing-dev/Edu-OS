@@ -1,6 +1,7 @@
 /* string.c - 字符串和内存操作函数 */
 
 #include "string.h"
+#include <mm/kmalloc.h>
 
 void *memset(void *dest, int val, size_t count)
 {
@@ -130,4 +131,118 @@ char *strrchr(const char *s, int c)
     }
     if (c == '\0') return (char *)s;
     return (char *)last;
+}
+
+/* FAT32 和 ProcFS 需要的额外函数 */
+
+int strcasecmp(const char *s1, const char *s2)
+{
+    while (*s1 && *s2) {
+        char c1 = (*s1 >= 'a' && *s1 <= 'z') ? (*s1 - 32) : *s1;
+        char c2 = (*s2 >= 'a' && *s2 <= 'z') ? (*s2 - 32) : *s2;
+        if (c1 != c2) {
+            return c1 - c2;
+        }
+        s1++;
+        s2++;
+    }
+    return *s1 - *s2;
+}
+
+char *strdup(const char *s)
+{
+    if (!s) return NULL;
+    
+    size_t len = strlen(s) + 1;
+    char *new_str = (char*)kmalloc(len);
+    if (!new_str) return NULL;
+    
+    memcpy(new_str, s, len);
+    return new_str;
+}
+
+static char *strtok_saveptr = NULL;
+
+char *strtok(char *str, const char *delim)
+{
+    if (str) {
+        strtok_saveptr = str;
+    }
+    
+    if (!strtok_saveptr) {
+        return NULL;
+    }
+    
+    /* 跳过前导分隔符 */
+    while (*strtok_saveptr && strchr(delim, *strtok_saveptr)) {
+        strtok_saveptr++;
+    }
+    
+    if (*strtok_saveptr == '\0') {
+        strtok_saveptr = NULL;
+        return NULL;
+    }
+    
+    /* 找到 token 的开始 */
+    char *token_start = strtok_saveptr;
+    
+    /* 找到下一个分隔符 */
+    while (*strtok_saveptr && !strchr(delim, *strtok_saveptr)) {
+        strtok_saveptr++;
+    }
+    
+    if (*strtok_saveptr) {
+        *strtok_saveptr = '\0';
+        strtok_saveptr++;
+    } else {
+        strtok_saveptr = NULL;
+    }
+    
+    return token_start;
+}
+
+int toupper(int c)
+{
+    if (c >= 'a' && c <= 'z') {
+        return c - 32;
+    }
+    return c;
+}
+
+int tolower(int c)
+{
+    if (c >= 'A' && c <= 'Z') {
+        return c + 32;
+    }
+    return c;
+}
+
+int islower(int c)
+{
+    return (c >= 'a' && c <= 'z');
+}
+
+int isupper(int c)
+{
+    return (c >= 'A' && c <= 'Z');
+}
+
+int isalpha(int c)
+{
+    return islower(c) || isupper(c);
+}
+
+int isdigit(int c)
+{
+    return (c >= '0' && c <= '9');
+}
+
+int isalnum(int c)
+{
+    return isalpha(c) || isdigit(c);
+}
+
+int isspace(int c)
+{
+    return (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v');
 }
