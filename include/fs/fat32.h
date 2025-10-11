@@ -313,9 +313,47 @@ int fat32_readdir(
     struct fat32_dir_entry *entry_out);
 
 /*
- * VFS 文件操作表
+ * 创建文件
+ */
+int fat32_create_file(
+    struct fat32_fs_info *fs,
+    const char *path,
+    uint32_t mode);
+
+/*
+ * 删除文件
+ */
+int fat32_unlink(
+    struct fat32_fs_info *fs,
+    const char *path);
+
+/*
+ * 创建目录
+ */
+int fat32_mkdir(
+    struct fat32_fs_info *fs,
+    const char *path);
+
+/*
+ * 删除目录
+ */
+int fat32_rmdir(
+    struct fat32_fs_info *fs,
+    const char *path);
+
+/*
+ * 生成短文件名
+ */
+void fat32_generate_short_name(
+    const char *long_name,
+    char *short_name_out,
+    int tail_num);
+
+/*
+ * VFS 操作表
  */
 extern struct vfs_file_operations fat32_file_ops;
+extern struct vfs_inode_operations *fat32_get_inode_ops(void);
 
 #endif // FAT32_H
 

@@ -6,6 +6,7 @@
 
 #include <fs/fat32.h>
 #include <fs/vfs.h>
+#include <drivers/block.h>
 #include <kernel.h>
 #include <string.h>
 #include <mm/kmalloc.h>
@@ -15,21 +16,19 @@
 static struct fat32_fs_info *g_fat32_fs = NULL;
 static bool g_fat32_initialized = false;
 
-/* ========== 块设备模拟接口 ========== */
+/* ========== 块设备接口包装 ========== */
 
 /*
- * 读取扇区（临时实现，后续需要真实的块设备驱动）
+ * 读取扇区
  */
 static int read_sectors(void *bdev, uint32_t sector, uint32_t count, void *buf)
 {
-    (void)bdev;
-    (void)sector;
-    (void)count;
-    (void)buf;
+    if (!bdev) {
+        return -EINVAL;
+    }
     
-    /* TODO: 实现真实的块设备读取 */
-    kprintf("[FAT32] read_sectors: sector=%u, count=%u\n", sector, count);
-    return 0;
+    struct block_device *blkdev = (struct block_device*)bdev;
+    return block_read_sectors(blkdev, sector, count, buf);
 }
 
 /*
@@ -37,14 +36,12 @@ static int read_sectors(void *bdev, uint32_t sector, uint32_t count, void *buf)
  */
 static int write_sectors(void *bdev, uint32_t sector, uint32_t count, const void *buf)
 {
-    (void)bdev;
-    (void)sector;
-    (void)count;
-    (void)buf;
+    if (!bdev) {
+        return -EINVAL;
+    }
     
-    /* TODO: 实现真实的块设备写入 */
-    kprintf("[FAT32] write_sectors: sector=%u, count=%u\n", sector, count);
-    return 0;
+    struct block_device *blkdev = (struct block_device*)bdev;
+    return block_write_sectors(blkdev, sector, count, buf);
 }
 
 /* ========== 簇和扇区转换 ========== */
@@ -271,17 +268,29 @@ int fat32_mount(void *bdev)
     
     /* 读取引导扇区 */
     struct fat32_boot_sector bs;
+    kprintf("[FAT32] Reading boot sector...\n");
     if (read_sectors(bdev, 0, 1, &bs) < 0) {
         kprintf("[FAT32] Failed to read boot sector\n");
         kfree(fs);
         return -EIO;
     }
+    kprintf("[FAT32] Boot sector read successfully\n");
+    
+    /* 打印调试信息 */
+    kprintf("[FAT32] Boot signature: 0x%x\n", (unsigned int)bs.boot_signature_end);
+    kprintf("[FAT32] FS Type: [%c%c%c%c%c%c%c%c]\n", 
+            bs.fs_type[0], bs.fs_type[1], bs.fs_type[2], bs.fs_type[3],
+            bs.fs_type[4], bs.fs_type[5], bs.fs_type[6], bs.fs_type[7]);
+    kprintf("[FAT32] Bytes per sector: %u\n", (unsigned int)bs.bytes_per_sector);
+    kprintf("[FAT32] Sectors per cluster: %u\n", (unsigned int)bs.sectors_per_cluster);
     
     /* 验证引导扇区 */
     if (!validate_boot_sector(&bs)) {
+        kprintf("[FAT32] Boot sector validation failed\n");
         kfree(fs);
         return -EINVAL;
     }
+    kprintf("[FAT32] Boot sector validated\n");
     
     /* 提取参数 */
     fs->bytes_per_sector = bs.bytes_per_sector;
@@ -302,7 +311,11 @@ int fat32_mount(void *bdev)
     fs->total_clusters = (data_sectors / fs->sectors_per_cluster) + 2;
     
     /* 打印信息 */
-    kprintf("[FAT32] Volume Label: %.11s\n", bs.volume_label);
+    kprintf("[FAT32] Volume Label: [%c%c%c%c%c%c%c%c%c%c%c]\n",
+            bs.volume_label[0], bs.volume_label[1], bs.volume_label[2],
+            bs.volume_label[3], bs.volume_label[4], bs.volume_label[5],
+            bs.volume_label[6], bs.volume_label[7], bs.volume_label[8],
+            bs.volume_label[9], bs.volume_label[10]);
     kprintf("[FAT32] Bytes per Sector: %u\n", fs->bytes_per_sector);
     kprintf("[FAT32] Sectors per Cluster: %u\n", fs->sectors_per_cluster);
     kprintf("[FAT32] Cluster Size: %u bytes\n", fs->cluster_size);

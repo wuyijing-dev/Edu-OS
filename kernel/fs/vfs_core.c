@@ -150,6 +150,13 @@ struct vfs_dentry *vfs_lookup(const char *path)
         return NULL;
     }
     
+    /* 特殊处理：/proc 路径（临时解决方案） */
+    if (strncmp(path, "/proc", 5) == 0) {
+        /* 调用 procfs_lookup（需要外部声明） */
+        extern struct vfs_dentry *procfs_lookup_path(const char *path);
+        return procfs_lookup_path(path);
+    }
+    
     /* 从根目录开始 */
     struct vfs_dentry *current = vfs_state.root_dentry;
     const char *p = path + 1;  /* 跳过开头的'/' */

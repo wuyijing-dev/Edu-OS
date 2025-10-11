@@ -278,6 +278,38 @@ static int procfs_root_readdir(struct vfs_file *file, void *dirent, void *data)
     return 0;
 }
 
+/* ========== 路径查找 ========== */
+
+/*
+ * ProcFS 路径查找（供 VFS 调用）
+ */
+struct vfs_dentry *procfs_lookup_path(const char *path)
+{
+    if (!g_procfs_initialized || !g_procfs_root || !path) {
+        return NULL;
+    }
+    
+    /* 跳过 "/proc" 前缀 */
+    if (strncmp(path, "/proc", 5) != 0) {
+        return NULL;
+    }
+    
+    path += 5;  /* 跳过 "/proc" */
+    
+    /* 如果是 /proc 本身 */
+    if (*path == '\0' || (*path == '/' && *(path + 1) == '\0')) {
+        /* 返回 procfs 根 dentry */
+        extern struct vfs_dentry *vfs_alloc_dentry(const char *name, struct vfs_inode *inode);
+        return vfs_alloc_dentry("proc", g_procfs_root);
+    }
+    
+    /* 跳过斜杠 */
+    if (*path == '/') path++;
+    
+    /* 调用 procfs_lookup 查找文件 */
+    return procfs_lookup(g_procfs_root, path);
+}
+
 /* ========== 公共接口 ========== */
 
 /*

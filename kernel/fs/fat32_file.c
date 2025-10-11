@@ -234,38 +234,6 @@ static int fat32_file_write(struct vfs_file *file, const char *buf, size_t count
     return bytes_written;
 }
 
-/* ========== 文件创建和删除 ========== */
-
-/*
- * 创建文件
- */
-int fat32_create_file(
-    struct fat32_fs_info *fs,
-    const char *path,
-    uint32_t mode)
-{
-    /* TODO: 实现文件创建 */
-    (void)fs;
-    (void)path;
-    (void)mode;
-    kprintf("[FAT32] create_file not yet implemented\n");
-    return -ENOSYS;
-}
-
-/*
- * 删除文件
- */
-int fat32_unlink(
-    struct fat32_fs_info *fs,
-    const char *path)
-{
-    /* TODO: 实现文件删除 */
-    (void)fs;
-    (void)path;
-    kprintf("[FAT32] unlink not yet implemented\n");
-    return -ENOSYS;
-}
-
 /* ========== VFS 操作表 ========== */
 
 struct vfs_file_operations fat32_file_ops = {

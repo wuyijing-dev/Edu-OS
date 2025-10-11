@@ -40,15 +40,18 @@
 #define O_APPEND    0x0400
 
 /* 错误码 */
-#define ENOENT  2    /* No such file or directory */
-#define ESRCH   3    /* No such process */
-#define EIO     5    /* I/O error */
-#define EBADF   9    /* Bad file descriptor */
-#define ENOMEM  12   /* Out of memory */
-#define EEXIST  17   /* File exists */
-#define EINVAL  22   /* Invalid argument */
-#define ENOSPC  28   /* No space left on device */
-#define ENOSYS  38   /* Function not implemented */
+#define ENOENT      2    /* No such file or directory */
+#define ESRCH       3    /* No such process */
+#define EIO         5    /* I/O error */
+#define EBADF       9    /* Bad file descriptor */
+#define ENOMEM      12   /* Out of memory */
+#define EEXIST      17   /* File exists */
+#define EISDIR      21   /* Is a directory */
+#define EINVAL      22   /* Invalid argument */
+#define ENOTDIR     20   /* Not a directory */
+#define ENOSPC      28   /* No space left on device */
+#define ENOSYS      38   /* Function not implemented */
+#define ENOTEMPTY   39   /* Directory not empty */
 
 /* 设备号操作宏 */
 #define MINORBITS   20

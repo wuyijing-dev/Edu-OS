@@ -5,13 +5,14 @@
 #include "serial.h"
 #include "string.h"
 
-/* 使用串口输出调试 */
-#define DEBUG_USE_SERIAL 0  /* 改回VGA输出 */
+/* 输出模式：同时输出到 VGA 和串口 */
+#define OUTPUT_TO_BOTH 1  /* 同时输出到 VGA 和串口（宿主机） */
 
 /* 输出辅助函数 */
 static inline void debug_putc(char c)
 {
-#if DEBUG_USE_SERIAL
+#if OUTPUT_TO_BOTH
+    vga_putc(c);
     serial_putc(COM1, c);
 #else
     vga_putc(c);
@@ -20,7 +21,8 @@ static inline void debug_putc(char c)
 
 static inline void debug_puts(const char *s)
 {
-#if DEBUG_USE_SERIAL
+#if OUTPUT_TO_BOTH
+    vga_puts(s);
     while (*s) {
         serial_putc(COM1, *s++);
     }

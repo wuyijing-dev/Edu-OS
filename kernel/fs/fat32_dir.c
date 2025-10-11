@@ -296,33 +296,4 @@ struct fat32_dir_entry *fat32_lookup(
     return entry;
 }
 
-/* ========== 目录创建和删除 ========== */
-
-/*
- * 创建目录
- */
-int fat32_mkdir(
-    struct fat32_fs_info *fs,
-    const char *path)
-{
-    /* TODO: 实现目录创建 */
-    (void)fs;
-    (void)path;
-    kprintf("[FAT32] mkdir not yet implemented\n");
-    return -ENOSYS;
-}
-
-/*
- * 删除目录
- */
-int fat32_rmdir(
-    struct fat32_fs_info *fs,
-    const char *path)
-{
-    /* TODO: 实现目录删除 */
-    (void)fs;
-    (void)path;
-    kprintf("[FAT32] rmdir not yet implemented\n");
-    return -ENOSYS;
-}
 

@@ -48,6 +48,9 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/arch/i386/interrupt_dispatch.c \
 	$(KERNEL_DIR)/drivers/timer.c \
 	$(KERNEL_DIR)/drivers/keyboard.c \
+	$(KERNEL_DIR)/drivers/block.c \
+	$(KERNEL_DIR)/drivers/ide.c \
+	$(KERNEL_DIR)/drivers/ramdisk.c \
 	$(KERNEL_DIR)/mm/pmm.c \
 	$(KERNEL_DIR)/mm/vmm.c \
 	$(KERNEL_DIR)/mm/kmalloc.c \
@@ -70,6 +73,8 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/fs/fat32_dir.c \
 	$(KERNEL_DIR)/fs/fat32_file.c \
 	$(KERNEL_DIR)/fs/fat32_lfn.c \
+	$(KERNEL_DIR)/fs/fat32_create.c \
+	$(KERNEL_DIR)/fs/fat32_vfs.c \
 	$(LIB_DIR)/string.c \
 	$(LIB_DIR)/libgcc_compat.c
 
@@ -206,6 +211,18 @@ $(BUILD_DIR)/keyboard.o: $(KERNEL_DIR)/drivers/keyboard.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $<$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD_DIR)/block.o: $(KERNEL_DIR)/drivers/block.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (Block Device)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/ide.o: $(KERNEL_DIR)/drivers/ide.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (IDE Driver)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/ramdisk.o: $(KERNEL_DIR)/drivers/ramdisk.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (RAM Disk)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
 # 第4章新增的内存管理文件
 $(BUILD_DIR)/pmm.o: $(KERNEL_DIR)/mm/pmm.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (PMM)$(NC)"
@@ -299,6 +316,14 @@ $(BUILD_DIR)/fat32_lfn.o: $(KERNEL_DIR)/fs/fat32_lfn.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (FAT32 Long Filename)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD_DIR)/fat32_create.o: $(KERNEL_DIR)/fs/fat32_create.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (FAT32 Create/Delete)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/fat32_vfs.o: $(KERNEL_DIR)/fs/fat32_vfs.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (FAT32 VFS Integration)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
 # ===========================================================================
 # 链接内核ELF
 # ===========================================================================
@@ -358,13 +383,26 @@ $(OS_IMG): $(BOOT_STAGE1_BIN) $(BOOT_STAGE2_BIN) $(KERNEL_BIN) | $(BUILD_DIR)
 # ===========================================================================
 run: $(OS_IMG)
 	@echo -e "$(YELLOW)=========================================$(NC)"
-	@echo -e "$(YELLOW) 启动 EduOS (大内核支持)$(NC)"
+	@echo -e "$(YELLOW) 启动 EduOS (大内核 + FAT32 支持)$(NC)"
 	@echo -e "$(YELLOW)=========================================$(NC)"
 	@echo -e "$(CYAN)提示：使用硬盘模式 + Unreal模式加载器$(NC)"
-	@echo -e "$(CYAN)      支持 2MB-4MB 大内核$(NC)"
+	@echo -e "$(CYAN)      支持 2MB-4MB 大内核 + FAT32 文件系统$(NC)"
 	@echo ""
-	$(QEMU) -drive format=raw,file=$(OS_IMG),if=ide,index=0 \
-		-serial stdio -m 128M
+	@# 检查 FAT32 测试磁盘是否存在
+	@if [ ! -f $(BUILD_DIR)/fat32_test.img ]; then \
+		echo -e "$(YELLOW)提示: FAT32 测试磁盘不存在$(NC)"; \
+		echo -e "$(YELLOW)      运行 'tools/create_fat32_disk.sh' 创建$(NC)"; \
+	fi
+	@# 启动 QEMU（如果有 FAT32 磁盘则挂载）
+	@if [ -f $(BUILD_DIR)/fat32_test.img ]; then \
+		echo -e "$(CYAN)挂载 FAT32 测试磁盘为 Primary Slave (hdb)$(NC)"; \
+		$(QEMU) -hda $(OS_IMG) \
+			-hdb $(BUILD_DIR)/fat32_test.img \
+			-serial stdio -m 128M; \
+	else \
+		$(QEMU) -hda $(OS_IMG) \
+			-serial stdio -m 128M; \
+	fi
 
 # ===========================================================================
 # 调试模式
