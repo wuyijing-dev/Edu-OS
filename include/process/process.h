@@ -93,6 +93,9 @@ struct process {
     /* 父子关系 */
     struct process *parent;         /* 父进程 */
     
+    /* 同步原语支持 */
+    struct process *next_waiting;   /* 等待队列链表 */
+    
     /* 其他信息 */
     uint32_t exit_code;             /* 退出码 */
     uint64_t start_time;            /* 启动时间（tick） */

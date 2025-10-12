@@ -819,7 +819,31 @@ gdt_data:
     db 11001111b
     db 0x00
 
+; 用户代码段（DPL=3）
+gdt_user_code:
+    dw 0xFFFF
+    dw 0x0000
+    db 0x00
+    db 11111010b        ; P=1, DPL=3, S=1, Type=1010 (代码段)
+    db 11001111b
+    db 0x00
+
+; 用户数据段（DPL=3）
+gdt_user_data:
+    dw 0xFFFF
+    dw 0x0000
+    db 0x00
+    db 11110010b        ; P=1, DPL=3, S=1, Type=0010 (数据段)
+    db 11001111b
+    db 0x00
+
 gdt_end:
+
+; 段选择子定义：
+; 0x08 = 内核代码段 (GDT[1], RPL=0)
+; 0x10 = 内核数据段 (GDT[2], RPL=0)
+; 0x1B = 用户代码段 (GDT[3], RPL=3)  = 0x18 | 3
+; 0x23 = 用户数据段 (GDT[4], RPL=3)  = 0x20 | 3
 
 gdt_descriptor:
     dw gdt_end - gdt_start - 1

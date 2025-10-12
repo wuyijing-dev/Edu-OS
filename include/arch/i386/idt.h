@@ -52,12 +52,36 @@
 /* 系统调用向量 */
 #define INT_SYSCALL     0x80    // 系统调用中断号
 
-/* IDT门类型 */
-#define IDT_TYPE_TASK       0x5     // 任务门
-#define IDT_TYPE_INT16      0x6     // 16位中断门
-#define IDT_TYPE_TRAP16     0x7     // 16位陷阱门
-#define IDT_TYPE_INT32      0xE     // 32位中断门
-#define IDT_TYPE_TRAP32     0xF     // 32位陷阱门
+/* 
+ * IDT门类型定义
+ * 
+ * Intel x86架构支持5种门类型，每种门有不同的用途和行为：
+ * 
+ * 1. 任务门 (Task Gate)
+ *    - 用于任务切换，指向TSS（任务状态段）
+ *    - 触发时会进行完整的任务上下文切换
+ *    - 现代操作系统很少使用，因为开销较大
+ * 
+ * 2. 中断门 (Interrupt Gate)
+ *    - 用于处理硬件中断和异常
+ *    - 自动清除EFLAGS.IF位，禁用中断（防止中断嵌套）
+ *    - 适用于需要原子性处理的关键中断
+ * 
+ * 3. 陷阱门 (Trap Gate)
+ *    - 用于处理异常和系统调用
+ *    - 不会清除EFLAGS.IF位，允许中断嵌套
+ *    - 适用于可以被中断的长时间处理
+ * 
+ * 区别总结：
+ * - 中断门 vs 陷阱门：主要区别在于是否自动禁用中断
+ * - 16位 vs 32位：决定了偏移地址的位数和处理器模式
+ * - 任务门：完全不同的机制，用于任务切换而非简单的函数调用
+ */
+#define IDT_TYPE_TASK       0x5     // 任务门 - 用于任务切换
+#define IDT_TYPE_INT16      0x6     // 16位中断门 - 自动禁用中断
+#define IDT_TYPE_TRAP16     0x7     // 16位陷阱门 - 保持中断状态
+#define IDT_TYPE_INT32      0xE     // 32位中断门 - 自动禁用中断（常用）
+#define IDT_TYPE_TRAP32     0xF     // 32位陷阱门 - 保持中断状态（系统调用常用）
 
 /* IDT门属性 */
 #define IDT_ATTR_PRESENT    0x80    // P位：存在位

@@ -59,6 +59,8 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/process/scheduler.c \
 	$(KERNEL_DIR)/process/priority_sched.c \
 	$(KERNEL_DIR)/process/mlfq_sched.c \
+	$(KERNEL_DIR)/process/fork.c \
+	$(KERNEL_DIR)/process/exec.c \
 	$(KERNEL_DIR)/fs/vfs_core.c \
 	$(KERNEL_DIR)/fs/devfs.c \
 	$(KERNEL_DIR)/fs/dev_null.c \
@@ -81,6 +83,12 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/syscall/sys_io.c \
 	$(KERNEL_DIR)/syscall/sys_process.c \
 	$(KERNEL_DIR)/syscall/sys_mem.c \
+	$(KERNEL_DIR)/exec/elf_loader.c \
+	$(KERNEL_DIR)/exec/usermode.c \
+	$(KERNEL_DIR)/exec/user_process.c \
+	$(KERNEL_DIR)/sync/mutex.c \
+	$(KERNEL_DIR)/sync/semaphore.c \
+	$(KERNEL_DIR)/sync/spinlock.c \
 	$(LIB_DIR)/string.c \
 	$(LIB_DIR)/libgcc_compat.c
 
@@ -264,6 +272,14 @@ $(BUILD_DIR)/mlfq_sched.o: $(KERNEL_DIR)/process/mlfq_sched.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (MLFQ Scheduler)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD_DIR)/fork.o: $(KERNEL_DIR)/process/fork.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (Fork)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/exec.o: $(KERNEL_DIR)/process/exec.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (Exec)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
 # 第7章新增的VFS和DevFS文件
 $(BUILD_DIR)/vfs_core.o: $(KERNEL_DIR)/fs/vfs_core.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (VFS Core)$(NC)"
@@ -354,6 +370,32 @@ $(BUILD_DIR)/sys_process.o: $(KERNEL_DIR)/syscall/sys_process.c | $(BUILD_DIR)
 
 $(BUILD_DIR)/sys_mem.o: $(KERNEL_DIR)/syscall/sys_mem.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (Syscall Memory)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# 第14-15章新增的用户态和ELF加载器
+$(BUILD_DIR)/elf_loader.o: $(KERNEL_DIR)/exec/elf_loader.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (ELF Loader)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/usermode.o: $(KERNEL_DIR)/exec/usermode.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (User Mode)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/user_process.o: $(KERNEL_DIR)/exec/user_process.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (User Process)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# 同步原语（互斥锁、信号量、自旋锁）
+$(BUILD_DIR)/mutex.o: $(KERNEL_DIR)/sync/mutex.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (Mutex)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/semaphore.o: $(KERNEL_DIR)/sync/semaphore.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (Semaphore)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/spinlock.o: $(KERNEL_DIR)/sync/spinlock.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (Spinlock)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # ===========================================================================
