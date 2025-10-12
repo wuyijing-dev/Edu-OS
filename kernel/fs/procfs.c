@@ -430,7 +430,9 @@ int procfs_init(void)
     
     g_procfs_sb->root = g_procfs_root;
     
-    /* 注册到 VFS */
+    /* 不要注册为根！ProcFS 通过 /proc 路径特殊处理 */
+    /* 注意：真正的 VFS 应该支持挂载点，这里是简化实现 */
+    #if 0
     int ret = vfs_register_filesystem("proc", g_procfs_sb);
     if (ret < 0) {
         kprintf("[ProcFS] Failed to register filesystem: %d\n", ret);
@@ -438,9 +440,10 @@ int procfs_init(void)
         kfree(g_procfs_sb);
         return ret;
     }
+    #endif
     
     g_procfs_initialized = true;
-    kprintf("[ProcFS] ProcFS initialized successfully\n");
+    kprintf("[ProcFS] ProcFS initialized (mounted at /proc via path routing)\n");
     
     return 0;
 }

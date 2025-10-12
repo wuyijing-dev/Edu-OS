@@ -50,3 +50,11 @@ char serial_getc(uint16_t port)
         ;
     return inb(port + SERIAL_DATA);
 }
+
+char serial_getc_nowait(uint16_t port)
+{
+    if (serial_received(port)) {
+        return inb(port + SERIAL_DATA);
+    }
+    return -1;
+}

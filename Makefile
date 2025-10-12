@@ -34,6 +34,7 @@ BOOT_STAGE2_ASM := $(BOOT_DIR)/stage2/loader_complete.asm
 KERNEL_ENTRY_ASM := $(KERNEL_DIR)/arch/i386/entry.asm
 INTERRUPTS_ASM := $(KERNEL_DIR)/arch/i386/interrupts.asm
 CONTEXT_SWITCH_ASM := $(KERNEL_DIR)/process/context_switch.asm
+SYSCALL_ENTRY_ASM := $(KERNEL_DIR)/syscall/syscall_entry.asm
 
 # C源文件
 KERNEL_C_FILES := \
@@ -75,6 +76,11 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/fs/fat32_lfn.c \
 	$(KERNEL_DIR)/fs/fat32_create.c \
 	$(KERNEL_DIR)/fs/fat32_vfs.c \
+	$(KERNEL_DIR)/syscall/syscall.c \
+	$(KERNEL_DIR)/syscall/syscall_table.c \
+	$(KERNEL_DIR)/syscall/sys_io.c \
+	$(KERNEL_DIR)/syscall/sys_process.c \
+	$(KERNEL_DIR)/syscall/sys_mem.c \
 	$(LIB_DIR)/string.c \
 	$(LIB_DIR)/libgcc_compat.c
 
@@ -84,9 +90,10 @@ BOOT_STAGE2_BIN := $(BUILD_DIR)/boot_stage2.bin
 KERNEL_ENTRY_O := $(BUILD_DIR)/entry.o
 INTERRUPTS_O := $(BUILD_DIR)/interrupts.o
 CONTEXT_SWITCH_O := $(BUILD_DIR)/context_switch.o
+SYSCALL_ENTRY_O := $(BUILD_DIR)/syscall_entry.o
 KERNEL_C_O := $(patsubst %.c,$(BUILD_DIR)/%.o,$(notdir $(KERNEL_C_FILES)))
 
-ALL_KERNEL_O := $(KERNEL_ENTRY_O) $(INTERRUPTS_O) $(CONTEXT_SWITCH_O) $(KERNEL_C_O)
+ALL_KERNEL_O := $(KERNEL_ENTRY_O) $(INTERRUPTS_O) $(CONTEXT_SWITCH_O) $(SYSCALL_ENTRY_O) $(KERNEL_C_O)
 
 KERNEL_ELF := $(BUILD_DIR)/kernel.elf
 KERNEL_BIN := $(BUILD_DIR)/kernel.bin
@@ -153,6 +160,10 @@ $(INTERRUPTS_O): $(INTERRUPTS_ASM) | $(BUILD_DIR)
 
 $(CONTEXT_SWITCH_O): $(CONTEXT_SWITCH_ASM) | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译上下文切换 (context_switch.asm)...$(NC)"
+	$(AS) $(ASFLAGS_ELF) $< -o $@
+
+$(SYSCALL_ENTRY_O): $(SYSCALL_ENTRY_ASM) | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译系统调用入口 (syscall_entry.asm)...$(NC)"
 	$(AS) $(ASFLAGS_ELF) $< -o $@
 
 # ===========================================================================
@@ -322,6 +333,27 @@ $(BUILD_DIR)/fat32_create.o: $(KERNEL_DIR)/fs/fat32_create.c | $(BUILD_DIR)
 
 $(BUILD_DIR)/fat32_vfs.o: $(KERNEL_DIR)/fs/fat32_vfs.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (FAT32 VFS Integration)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# 第13章新增的系统调用文件
+$(BUILD_DIR)/syscall.o: $(KERNEL_DIR)/syscall/syscall.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (Syscall Core)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/syscall_table.o: $(KERNEL_DIR)/syscall/syscall_table.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (Syscall Table)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/sys_io.o: $(KERNEL_DIR)/syscall/sys_io.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (Syscall I/O)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/sys_process.o: $(KERNEL_DIR)/syscall/sys_process.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (Syscall Process)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/sys_mem.o: $(KERNEL_DIR)/syscall/sys_mem.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (Syscall Memory)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # ===========================================================================

@@ -25,12 +25,16 @@
 #include <fs/fat32.h>
 #include <drivers/block.h>
 #include <drivers/ramdisk.h>
+#include <syscall.h>
 
 /* 外部符号：内核结束地址 */
 extern uint32_t kernel_end;
 
 /* 外部函数：IDE 驱动 */
 extern void ide_init(void);
+
+/* 外部函数：系统调用 */
+extern void syscall_init(void);
 
 /* ========== VFS测试函数（第7章） ========== */
 
@@ -505,6 +509,87 @@ static void test_fat32(void)
     kprintf("\n");
 }
 
+/* ========== 系统调用测试函数（第13章） ========== */
+
+static void test_syscall(void)
+{
+    kprintf("\n");
+    kprintf("================================================================================\n");
+    kprintf("=== Chapter 13: Testing System Calls (INT 0x80) ===\n");
+    kprintf("================================================================================\n");
+    kprintf("\n");
+    
+    kprintf("[SYSCALL Test] Note: System calls are ready for user-mode programs\n");
+    kprintf("[SYSCALL Test] Testing from kernel mode (demonstration)...\n\n");
+    
+    /* 测试 1：getpid */
+    kprintf("[Test 1] Testing sys_getpid()...\n");
+    pid_t pid = sys_getpid();
+    kprintf("[OK] Current PID: %d\n\n", (int)pid);
+    
+    /* 测试 2：从内核直接调用 sys_write */
+    kprintf("[Test 2] Testing sys_write()...\n");
+    
+    /* 先测试 VFS 直接调用 */
+    kprintf("[DEBUG] Testing VFS directly first...\n");
+    kprintf("[DEBUG] Trying /null...\n");
+    int fd_null = vfs_open("/null", O_WRONLY, 0);
+    kprintf("[DEBUG] VFS open /null returned: %d\n", fd_null);
+    if (fd_null >= 0) {
+        vfs_close(fd_null);
+    }
+    
+    kprintf("[DEBUG] Trying /zero...\n");
+    int fd_zero = vfs_open("/zero", O_RDONLY, 0);
+    kprintf("[DEBUG] VFS open /zero returned: %d\n", fd_zero);
+    if (fd_zero >= 0) {
+        vfs_close(fd_zero);
+    }
+    
+    kprintf("[DEBUG] Trying /console...\n");
+    int fd_test = vfs_open("/console", O_WRONLY, 0);
+    kprintf("[DEBUG] VFS open /console returned: %d\n", fd_test);
+    if (fd_test >= 0) {
+        vfs_close(fd_test);
+    }
+    
+    /* 现在测试系统调用 */
+    int fd = sys_open("/console", O_WRONLY, 0);
+    if (fd >= 0) {
+        const char *msg = "[SYSCALL] Hello from sys_write!\n";
+        int ret = sys_write(fd, msg, strlen(msg));
+        kprintf("[OK] sys_write returned: %d bytes\n", ret);
+        sys_close(fd);
+    } else {
+        kprintf("[INFO] sys_open failed: %d\n", fd);
+        kprintf("[INFO] Trying /null instead...\n");
+        
+        fd = sys_open("/null", O_WRONLY, 0);
+        if (fd >= 0) {
+            const char *msg = "Test message\n";
+            int ret = sys_write(fd, msg, strlen(msg));
+            kprintf("[OK] sys_write to /null: %d bytes\n", ret);
+            sys_close(fd);
+        }
+    }
+    
+    kprintf("\n");
+    kprintf("[Test 3] System call interface ready!\n");
+    kprintf("[INFO] System calls available:\n");
+    kprintf("  - sys_read, sys_write, sys_open, sys_close\n");
+    kprintf("  - sys_getpid, sys_getppid\n");
+    kprintf("  - sys_fork, sys_execve (to be implemented)\n");
+    kprintf("  - sys_mkdir, sys_rmdir, sys_unlink\n");
+    kprintf("  - sys_brk, sys_mmap, sys_munmap\n");
+    kprintf("\n");
+    
+    kprintf("================================================================================\n");
+    kprintf("=== System Call Tests Completed! ===\n");
+    kprintf("=== Ready for User Mode Programs! ===\n");
+    kprintf("================================================================================\n");
+    kprintf("\n");
+}
+
 /* ========== 测试线程（第6章：调度算法测试） ========== */
 
 /* CPU密集型线程（计算） */
@@ -938,6 +1023,11 @@ void kernel_main(void)
     priority_scheduler_init();
     mlfq_init();
     
+    /* ========== 第13章：初始化系统调用 ========== */
+    kprintf("\n[INIT] Initializing System Call Interface...\n");
+    syscall_init();
+    kprintf("[OK] System calls ready\n");
+    
     /* ========== 第9章：初始化并测试 ProcFS ========== */
     kprintf("\n[INIT] Initializing ProcFS...\n");
     ret = procfs_init();
@@ -952,6 +1042,9 @@ void kernel_main(void)
     
     /* ========== 第10章：初始化并测试 FAT32 ========== */
     test_fat32();
+    
+    /* ========== 第13章：测试系统调用 ========== */
+    test_syscall();
     
     #if 0  // 暂时禁用 MLFQ 测试
     /* ========== MLFQ 调度器测试（暂时禁用） ========== */

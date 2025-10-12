@@ -45,13 +45,15 @@
 #define EIO         5    /* I/O error */
 #define EBADF       9    /* Bad file descriptor */
 #define ENOMEM      12   /* Out of memory */
+#define EFAULT      14   /* Bad address */
 #define EEXIST      17   /* File exists */
+#define ENOTDIR     20   /* Not a directory */
 #define EISDIR      21   /* Is a directory */
 #define EINVAL      22   /* Invalid argument */
-#define ENOTDIR     20   /* Not a directory */
 #define ENOSPC      28   /* No space left on device */
 #define ENOSYS      38   /* Function not implemented */
 #define ENOTEMPTY   39   /* Directory not empty */
+#define ENAMETOOLONG 36  /* File name too long */
 
 /* 设备号操作宏 */
 #define MINORBITS   20

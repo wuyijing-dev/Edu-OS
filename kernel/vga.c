@@ -49,18 +49,29 @@ uint8_t vga_get_color(void)
 
 void vga_scroll(void)
 {
+    // 创建一个空白字符条目，用于填充最后一行
+    // 使用当前颜色属性，确保新行的背景色与当前设置一致
     uint16_t blank = vga_make_entry(' ', current_color);
     
+    // 向上滚动屏幕内容：将每一行的内容复制到上一行
+    // 从第0行开始，到倒数第二行结束（VGA_HEIGHT - 1）
     for (int y = 0; y < VGA_HEIGHT - 1; y++) {
+        // 对于当前行的每一列
         for (int x = 0; x < VGA_WIDTH; x++) {
+            // 将下一行(y+1)的字符复制到当前行(y)
+            // 这样实现了整体向上移动一行的效果
             vga_buffer[y * VGA_WIDTH + x] = vga_buffer[(y + 1) * VGA_WIDTH + x];
         }
     }
     
+    // 清空最后一行：用空白字符填充屏幕的最后一行
+    // 因为上面的循环只处理了前24行，最后一行需要单独清理
     for (int x = 0; x < VGA_WIDTH; x++) {
         vga_buffer[(VGA_HEIGHT - 1) * VGA_WIDTH + x] = blank;
     }
     
+    // 将光标Y坐标设置到最后一行
+    // 这样新的输出会出现在屏幕底部的空白行
     cursor_y = VGA_HEIGHT - 1;
 }
 

@@ -62,6 +62,8 @@ void serial_puts(uint16_t port, const char *str);
 // 读取单个字符（如果可用）
 char serial_getc(uint16_t port);
 
+char serial_getc_nowait(uint16_t port);
+
 // 检查是否有数据可读
 int serial_received(uint16_t port);
 
