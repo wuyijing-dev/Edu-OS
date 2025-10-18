@@ -7,6 +7,9 @@
 #include <arch/i386/idt.h>
 #include <kernel.h>
 #include <vga.h>
+#include <process/process.h>
+#include <mm/vma.h>
+#include <mm/vmm.h>
 
 /* 异常名称表 */
 static const char *exception_messages[32] = {
@@ -181,7 +184,28 @@ static void handle_page_fault(struct interrupt_frame *frame)
         panic("Kernel page fault");
     }
     
-    /* TODO: 用户空间缺页 - 终止进程或按需分配 */
+    /* 用户空间缺页 - 检查是否可以按需分配 */
+    if (fault_addr < 0xC0000000) {
+        struct process *proc = process_get_current();
+        
+        if (proc && proc->vma_list) {
+            /* 查找对应的 VMA */
+            struct vma *vma = vma_find(proc->vma_list, fault_addr);
+            if (vma) {
+                /* 尝试按需分配 */
+                if (vma_handle_page_fault(vma, fault_addr, proc->page_dir) == 0) {
+                    kprintf("[PAGE FAULT] Handled via VMA: 0x%08x\n", fault_addr);
+                    return;  /* 缺页已处理，返回用户程序继续执行 */
+                }
+            }
+        }
+    }
+    
+    /* 非法访问 - 终止进程 */
+    kprintf("[PAGE FAULT] Unhandled user space fault at 0x%08x\n", fault_addr);
+    kprintf("[PAGE FAULT] TODO: Terminate offending process\n");
+    /* TODO: 真正终止进程 */
+    while(1) { asm volatile("hlt"); }
 }
 
 /*

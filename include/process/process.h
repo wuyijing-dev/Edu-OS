@@ -11,6 +11,9 @@
 #include <stdbool.h>
 #include <mm/vmm.h>
 
+/* 前向声明 */
+struct vma;
+
 /* 进程状态 */
 typedef enum {
     PROCESS_STATE_NEW = 0,        /* 新建 */
@@ -67,6 +70,7 @@ struct process {
     struct page_directory *page_dir;  /* 页目录 */
     uint32_t kernel_stack;          /* 内核栈地址 */
     uint32_t kernel_stack_size;     /* 内核栈大小 */
+    struct vma *vma_list;           /* 虚拟内存区域链表（用于按需分配） */
     
     /* 调度信息（基本） */
     uint32_t time_slice;            /* 时间片（tick数） */

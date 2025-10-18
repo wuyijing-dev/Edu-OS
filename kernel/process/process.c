@@ -268,6 +268,13 @@ void process_destroy(struct process *proc)
         kfree((void*)proc->kernel_stack);
     }
     
+    /* 清理VMA链表 */
+    if (proc->vma_list) {
+        extern void vma_destroy_all(struct vma *list);
+        vma_destroy_all(proc->vma_list);
+        proc->vma_list = NULL;
+    }
+    
     /* 释放页目录（如果有独立的） */
     if (proc->page_dir) {
         vmm_destroy_page_directory(proc->page_dir);

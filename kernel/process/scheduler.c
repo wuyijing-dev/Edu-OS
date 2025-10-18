@@ -330,8 +330,12 @@ void context_switch(struct process *prev, struct process *next)
     
     /* 切换页目录（如果进程有独立的地址空间） */
     if (next->page_dir) {
-        // TODO: 实现地址空间切换
-        // vmm_switch_page_directory(next->page_dir);
+        extern void vmm_switch_page_directory(struct page_directory *pd);
+        vmm_switch_page_directory(next->page_dir);
+        
+        /* 调试输出（可以注释） */
+        // kprintf("[SCHEDULER] Switched to PD 0x%08x for process %s\n", 
+        //         next->page_dir->physical_addr, next->name);
     }
     
     /* 调用汇编实现的上下文切换 */

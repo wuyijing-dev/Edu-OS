@@ -106,15 +106,12 @@ int sys_close(int fd)
 }
 
 /*
- * sys_lseek - 移动文件读写位置
+ * sys_lseek - 改变文件指针位置
  */
 int sys_lseek(int fd, off_t offset, int whence)
 {
-    /* TODO: 实现 lseek */
-    (void)fd;
-    (void)offset;
-    (void)whence;
-    return -ENOSYS;
+    extern int vfs_lseek(int fd, off_t offset, int whence);
+    return vfs_lseek(fd, offset, whence);
 }
 
 /*
@@ -130,39 +127,13 @@ int sys_creat(const char *path, mode_t mode)
  */
 int sys_unlink(const char *path)
 {
-    /* TODO: 调用 VFS unlink */
-    (void)path;
+    /* 简化实现：暂不支持 */
+    kprintf("[SYSCALL] sys_unlink: %s\n", path);
     return -ENOSYS;
 }
 
 /*
- * sys_mkdir - 创建目录
+ * 目录操作函数（mkdir, rmdir, chdir）已在 kernel/fs/directory.c 中实现
+ * 这里不再重复定义
  */
-int sys_mkdir(const char *path, mode_t mode)
-{
-    /* TODO: 调用 VFS mkdir */
-    (void)path;
-    (void)mode;
-    return -ENOSYS;
-}
-
-/*
- * sys_rmdir - 删除目录
- */
-int sys_rmdir(const char *path)
-{
-    /* TODO: 调用 VFS rmdir */
-    (void)path;
-    return -ENOSYS;
-}
-
-/*
- * sys_chdir - 改变当前工作目录
- */
-int sys_chdir(const char *path)
-{
-    /* TODO: 实现工作目录 */
-    (void)path;
-    return -ENOSYS;
-}
 

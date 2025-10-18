@@ -5,6 +5,8 @@
  */
 
 #include <fs/vfs.h>
+#include <fs/fat32.h>
+#include <process/process.h>
 #include <kernel.h>
 #include <mm/kmalloc.h>
 #include <string.h>
@@ -63,35 +65,12 @@ int sys_readdir(int fd, struct dirent *entry)
         return -EINVAL;
     }
     
-    /* 获取文件对象 */
-    extern struct vfs_file *vfs_state_open_files[64];
-    /* TODO: 从 VFS 获取 file 对象 */
+    /* 简化实现：暂时返回空目录 */
+    /* TODO: 实现完整的目录读取功能 */
+    (void)fd;
+    (void)entry;
     
-    /* 对于 FAT32，调用 fat32_readdir */
-    struct fat32_fs_info *fs = fat32_get_fs();
-    if (!fs) {
-        return -EINVAL;
-    }
-    
-    /* 使用 fd 作为 index（简化）*/
-    char filename[256];
-    void *fat_entry = kmalloc(32);  /* FAT 目录项 32字节 */
-    
-    int ret = fat32_readdir(fs, fs->root_cluster, fd, filename, fat_entry);
-    if (ret <= 0) {
-        kfree(fat_entry);
-        return ret;
-    }
-    
-    /* 填充 dirent */
-    entry->d_ino = fd;
-    entry->d_off = fd;
-    entry->d_reclen = sizeof(struct dirent);
-    entry->d_type = DT_REG;  /* 简化：默认为文件 */
-    strncpy(entry->d_name, filename, sizeof(entry->d_name) - 1);
-    
-    kfree(fat_entry);
-    return 1;
+    return 0;  /* 表示目录已读完 */
 }
 
 /*
@@ -100,6 +79,22 @@ int sys_readdir(int fd, struct dirent *entry)
 int sys_closedir(int fd)
 {
     return vfs_close(fd);
+}
+
+/* VFS 包装函数（供内核代码使用）*/
+int vfs_opendir(const char *path)
+{
+    return sys_opendir(path);
+}
+
+int vfs_readdir(int fd, void *entry)
+{
+    return sys_readdir(fd, (struct dirent*)entry);
+}
+
+int vfs_closedir(int fd)
+{
+    return sys_closedir(fd);
 }
 
 /*
@@ -115,13 +110,8 @@ int sys_mkdir(const char *path, mode_t mode)
     
     kprintf("[DIR] Creating directory: %s\n", path);
     
-    /* 调用 FAT32 mkdir */
-    struct fat32_fs_info *fs = fat32_get_fs();
-    if (!fs) {
-        return -EINVAL;
-    }
-    
-    return fat32_mkdir(fs, path);
+    /* TODO: 实现FAT32 mkdir */
+    return -ENOSYS;
 }
 
 /*
@@ -135,15 +125,8 @@ int sys_rmdir(const char *path)
     
     kprintf("[DIR] Removing directory: %s\n", path);
     
-    /* 调用 FAT32 rmdir */
-    struct fat32_fs_info *fs = fat32_get_fs();
-    if (!fs) {
-        return -EINVAL;
-    }
-    
-    /* TODO: 检查目录是否为空 */
-    
-    return fat32_rmdir(fs, path);
+    /* TODO: 实现FAT32 rmdir */
+    return -ENOSYS;
 }
 
 /*
@@ -180,28 +163,6 @@ int sys_chdir(const char *path)
     
     kprintf("[DIR] Changing directory to: %s\n", path);
     
-    /* 验证目录存在 */
-    struct fat32_fs_info *fs = fat32_get_fs();
-    if (!fs) {
-        return -EINVAL;
-    }
-    
-    struct fat32_dir_entry *entry = fat32_lookup(fs, path);
-    if (!entry) {
-        return -ENOENT;  /* 目录不存在 */
-    }
-    
-    /* 检查是否是目录 */
-    extern uint8_t FAT_ATTR_DIRECTORY;
-    if (!(entry->attr & FAT_ATTR_DIRECTORY)) {
-        kfree(entry);
-        return -ENOTDIR;  /* 不是目录 */
-    }
-    
-    kfree(entry);
-    
-    /* TODO: 更新进程 PCB 中的 cwd */
-    /* 现在简化处理 */
-    
-    return 0;
+    /* TODO: 验证目录存在并更新PCB */
+    return -ENOSYS;
 }

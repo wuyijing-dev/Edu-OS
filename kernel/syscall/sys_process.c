@@ -60,9 +60,8 @@ int sys_exit(int status)
  */
 int sys_fork(void)
 {
-    /* TODO: 实现 fork */
-    kprintf("[SYSCALL] sys_fork not yet implemented\n");
-    return -ENOSYS;
+    extern int do_fork(void);
+    return do_fork();
 }
 
 /*
@@ -70,12 +69,8 @@ int sys_fork(void)
  */
 int sys_execve(const char *path, char *const argv[], char *const envp[])
 {
-    /* TODO: 实现 execve */
-    (void)path;
-    (void)argv;
-    (void)envp;
-    kprintf("[SYSCALL] sys_execve not yet implemented\n");
-    return -ENOSYS;
+    extern int do_execve(const char *path, char *const argv[], char *const envp[]);
+    return do_execve(path, argv, envp);
 }
 
 /* 查找已终止的子进程 */

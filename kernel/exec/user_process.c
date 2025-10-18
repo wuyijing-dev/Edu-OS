@@ -86,6 +86,7 @@ pid_t create_user_process(const char *name, const char *elf_path)
     proc->pid = process_allocate_pid();
     proc->state = PROCESS_STATE_NEW;
     proc->priority = 120;  // 普通优先级
+    proc->vma_list = NULL;  // 初始化VMA链表
     
     /* 5. 创建独立页表 */
     proc->page_dir = create_user_page_directory();
@@ -137,12 +138,36 @@ pid_t create_user_process(const char *name, const char *elf_path)
             continue;
         }
         
-        kprintf("[USER_PROC] Preparing segment %d: vaddr=0x%08x, size=%u\n",
-                i, ph->p_vaddr, ph->p_memsz);
+        kprintf("[USER_PROC] Preparing segment %d: vaddr=0x%08x, memsz=%u, filesz=%u\n",
+                i, ph->p_vaddr, ph->p_memsz, ph->p_filesz);
         
-        /* 为每个页分配物理内存并设置到新进程的页表中 */
+        /* 计算段的范围 */
         uint32_t vaddr_start = ph->p_vaddr & ~0xFFF;
         uint32_t vaddr_end = (ph->p_vaddr + ph->p_memsz + 0xFFF) & ~0xFFF;
+        uint32_t filesz_end = (ph->p_vaddr + ph->p_filesz + 0xFFF) & ~0xFFF;
+        
+        /* 如果有BSS段（memsz > filesz），为BSS部分创建VMA */
+        if (ph->p_memsz > ph->p_filesz) {
+            uint32_t bss_start = filesz_end;
+            uint32_t bss_end = vaddr_end;
+            
+            if (bss_end > bss_start) {
+                extern struct vma *vma_create(uint32_t start, uint32_t end, uint32_t flags);
+                extern void vma_add(struct vma **list, struct vma *vma);
+                
+                /* 创建VMA：可读、可写、按需分配零页 */
+                uint32_t vma_flags = 0x01 | 0x02 | 0x08;  /* VMA_READ | VMA_WRITE | VMA_ZERO */
+                struct vma *vma = vma_create(bss_start, bss_end, vma_flags);
+                if (vma) {
+                    vma_add(&proc->vma_list, vma);
+                    kprintf("[USER_PROC] Created VMA for BSS: 0x%08x-0x%08x (%u KB, lazy)\n",
+                            bss_start, bss_end, (bss_end - bss_start) / 1024);
+                }
+            }
+            
+            /* 只为有数据的部分预分配 */
+            vaddr_end = filesz_end;
+        }
         
         for (uint32_t vaddr = vaddr_start; vaddr < vaddr_end; vaddr += 4096) {
             uint32_t paddr = pmm_alloc_frame();
