@@ -140,12 +140,18 @@ struct vfs_file {
 
 /* ========== VFS接口 ========== */
 
+/* lseek whence 参数 */
+#define SEEK_SET    0    /* 从文件开头 */
+#define SEEK_CUR    1    /* 从当前位置 */
+#define SEEK_END    2    /* 从文件末尾 */
+
 /* 系统调用级接口 */
 void vfs_init(void);
 int vfs_open(const char *path, int flags, int mode);
 int vfs_close(int fd);
 int vfs_read(int fd, char *buf, size_t count);
 int vfs_write(int fd, const char *buf, size_t count);
+off_t vfs_lseek(int fd, off_t offset, int whence);
 
 /* 内部函数 */
 struct vfs_dentry *vfs_lookup(const char *path);

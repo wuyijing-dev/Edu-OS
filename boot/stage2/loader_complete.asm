@@ -837,6 +837,15 @@ gdt_user_data:
     db 11001111b
     db 0x00
 
+; TSS 段（运行时设置）
+gdt_tss:
+    dw 0x0067           ; 限制：103 字节（TSS 最小大小）
+    dw 0x0000           ; 基址低16位（运行时填充）
+    db 0x00             ; 基址中8位
+    db 10001001b        ; P=1, DPL=0, Type=1001 (Available TSS)
+    db 01000000b        ; G=0, 限制高4位=0
+    db 0x00             ; 基址高8位
+
 gdt_end:
 
 ; 段选择子定义：
@@ -844,6 +853,7 @@ gdt_end:
 ; 0x10 = 内核数据段 (GDT[2], RPL=0)
 ; 0x1B = 用户代码段 (GDT[3], RPL=3)  = 0x18 | 3
 ; 0x23 = 用户数据段 (GDT[4], RPL=3)  = 0x20 | 3
+; 0x28 = TSS 段 (GDT[5], RPL=0)
 
 gdt_descriptor:
     dw gdt_end - gdt_start - 1

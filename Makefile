@@ -47,6 +47,7 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/arch/i386/irq.c \
 	$(KERNEL_DIR)/arch/i386/exception.c \
 	$(KERNEL_DIR)/arch/i386/interrupt_dispatch.c \
+	$(KERNEL_DIR)/arch/i386/tss.c \
 	$(KERNEL_DIR)/drivers/timer.c \
 	$(KERNEL_DIR)/drivers/keyboard.c \
 	$(KERNEL_DIR)/drivers/block.c \
@@ -84,6 +85,7 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/syscall/sys_process.c \
 	$(KERNEL_DIR)/syscall/sys_mem.c \
 	$(KERNEL_DIR)/exec/elf_loader.c \
+	$(KERNEL_DIR)/exec/elf_exec.c \
 	$(KERNEL_DIR)/exec/usermode.c \
 	$(KERNEL_DIR)/exec/user_process.c \
 	$(KERNEL_DIR)/sync/mutex.c \
@@ -220,6 +222,10 @@ $(BUILD_DIR)/exception.o: $(KERNEL_DIR)/arch/i386/exception.c | $(BUILD_DIR)
 
 $(BUILD_DIR)/interrupt_dispatch.o: $(KERNEL_DIR)/arch/i386/interrupt_dispatch.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $<$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/tss.o: $(KERNEL_DIR)/arch/i386/tss.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (TSS)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/timer.o: $(KERNEL_DIR)/drivers/timer.c | $(BUILD_DIR)
@@ -375,6 +381,10 @@ $(BUILD_DIR)/sys_mem.o: $(KERNEL_DIR)/syscall/sys_mem.c | $(BUILD_DIR)
 # 第14-15章新增的用户态和ELF加载器
 $(BUILD_DIR)/elf_loader.o: $(KERNEL_DIR)/exec/elf_loader.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (ELF Loader)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/elf_exec.o: $(KERNEL_DIR)/exec/elf_exec.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (ELF Exec)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/usermode.o: $(KERNEL_DIR)/exec/usermode.c | $(BUILD_DIR)

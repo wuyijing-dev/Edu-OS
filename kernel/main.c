@@ -39,9 +39,15 @@ extern void ide_init(void);
 /* 外部函数：系统调用 */
 extern void syscall_init(void);
 
+/* 外部函数：TSS */
+extern void tss_init(void);
+extern uint32_t tss_get_address(void);
+extern uint32_t tss_get_size(void);
+
 /* 外部函数：用户态和ELF */
 extern void test_user_mode(void);
 extern int elf_load(const char *path, uint32_t *entry);
+extern int elf_exec(const char *path);
 
 /* 外部函数：进程管理 */
 extern int do_fork(void);
@@ -1053,15 +1059,13 @@ void kernel_main(void)
     kprintf("\n[INIT] Initializing System Call Interface...\n");
     #endif
     
-    #if 0  // 静默初始化
+    // 初始化 TSS（用户态必需，会自动加载到 TR）
+    tss_init();
+    
+    // 静默初始化其他子系统
     syscall_init();
     ret = procfs_init();
-    #else
-    // 静默初始化，不输出
-    syscall_init();
-    ret = procfs_init();
-    (void)ret;  // 避免未使用警告
-    #endif
+    (void)ret;
     
     #if 0  // 注释掉 ProcFS 测试
     /* 运行 ProcFS 测试 */
@@ -1255,24 +1259,65 @@ void kernel_main(void)
     
     if (fs) {
         kprintf("  [6.1] FAT32 filesystem available ✅\n");
-        kprintf("  [6.2] Looking for ELF files on disk...\n");
+        kprintf("  [6.2] Listing root directory first...\n");
         
-        /* 尝试加载 hello.elf（如果存在） */
+        /* 先列出根目录看看有什么 */
+        char filename[256];
+        struct fat32_dir_entry entry_info;
+        kprintf("       Files on disk:\n");
+        
+        for (int i = 0; i < 10; i++) {
+            int ret = fat32_readdir(fs, fs->root_cluster, i, filename, &entry_info);
+            if (ret <= 0) break;
+            
+            kprintf("       - %s (%u bytes)\n", filename, entry_info.file_size);
+        }
+        
+        kprintf("\n  [6.3] Trying to load /hello.elf...\n");
+        
+        /* 尝试不同的路径 */
+        const char *paths[] = {"/hello.elf", "/HELLO.ELF", "hello.elf", "HELLO.ELF", NULL};
         uint32_t entry = 0;
-        int ret = elf_load("/hello.elf", &entry);
+        int loaded = 0;
         
-        if (ret == 0) {
-            kprintf("  [OK] Successfully loaded hello.elf\n");
-            kprintf("  [OK] Entry point: 0x%08x\n", entry);
-        } else if (ret == -ENOENT) {
-            kprintf("  [INFO] /hello.elf not found on disk\n");
-            kprintf("  [INFO] To test: create hello.elf and place on FAT32\n");
+        for (int i = 0; paths[i] != NULL; i++) {
+            kprintf("       Trying: %s\n", paths[i]);
+            int ret = elf_load(paths[i], &entry);
+            
+            if (ret == 0) {
+                kprintf("  [OK] Successfully loaded from %s\n", paths[i]);
+                kprintf("  [OK] Entry point: 0x%08x\n", entry);
+                loaded = 1;
+                
+                /* 现在真正执行！ */
+                kprintf("\n  [6.4] Executing user program with elf_exec()...\n");
+                kprintf("       This will:\n");
+                kprintf("         1. Create user page directory\n");
+                kprintf("         2. Map ELF segments to user space\n");
+                kprintf("         3. Setup user stack\n");
+                kprintf("         4. Switch to Ring 3 and execute\n\n");
+                
+                kprintf("  Press Ctrl+C to stop if system hangs\n\n");
+                
+                /* 真正执行 ELF！ */
+                int exec_ret = elf_exec(paths[i]);
+                
+                /* 如果返回到这里，说明执行失败或退出了 */
+                kprintf("\n  [INFO] elf_exec returned: %d\n", exec_ret);
+                
+                loaded = 1;
+                break;
+            }
+        }
+        
+        if (!loaded) {
+            kprintf("  [INFO] Could not load hello.elf\n");
+            kprintf("  [INFO] Check file name case sensitivity\n");
         } else {
-            kprintf("  [INFO] ELF load returned: %d\n", ret);
+            kprintf("\n  [SUCCESS] ELF loaded and ready for execution!\n");
         }
     } else {
         kprintf("  [INFO] No FAT32 filesystem mounted\n");
-        kprintf("  [INFO] ELF loader ready, waiting for filesystem\n");
     }
     kprintf("\n");
     

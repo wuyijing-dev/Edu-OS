@@ -40,12 +40,18 @@ int sys_getppid(void)
  */
 int sys_exit(int status)
 {
-    kprintf("[SYSCALL] Process %d exiting with status %d\n", 
-            sys_getpid(), status);
+    kprintf("\n[SYSCALL] User program exited with status %d\n", status);
+    kprintf("[SYSCALL] Returning to kernel...\n");
     
-    process_exit(status);
+    /* 简化：直接停止（真正的实现会切换到其他进程） */
+    kprintf("\n[SUCCESS] User mode program executed successfully!\n");
+    kprintf("[INFO] In a full implementation, would return to scheduler\n");
     
-    /* 不会执行到这里 */
+    /* 停止系统（演示用） */
+    while (1) {
+        asm("hlt");
+    }
+    
     return 0;
 }
 

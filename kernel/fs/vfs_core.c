@@ -3,6 +3,7 @@
  */
 
 #include <fs/vfs.h>
+#include <fs/fat32.h>
 #include <kernel.h>
 #include <mm/kmalloc.h>
 #include <string.h>
@@ -157,7 +158,7 @@ struct vfs_dentry *vfs_lookup(const char *path)
         return procfs_lookup_path(path);
     }
     
-    /* 从根目录开始 */
+    /* 从根目录开始（DevFS） */
     struct vfs_dentry *current = vfs_state.root_dentry;
     const char *p = path + 1;  /* 跳过开头的'/' */
     
@@ -183,11 +184,48 @@ struct vfs_dentry *vfs_lookup(const char *path)
         /* 查找子项 */
         current = lookup_child(current, component);
         if (!current) {
-            return NULL;
+            /* DevFS 找不到，尝试 FAT32 */
+            goto try_fat32;
         }
     }
     
     return current;
+
+try_fat32:
+    /* 尝试从 FAT32 查找 */
+    extern struct fat32_fs_info *fat32_get_fs(void);
+    extern struct fat32_dir_entry *fat32_lookup(struct fat32_fs_info *fs, const char *path);
+    
+    struct fat32_fs_info *fat32 = fat32_get_fs();
+    if (fat32) {
+        struct fat32_dir_entry *fat_entry = fat32_lookup(fat32, path);
+        if (fat_entry) {
+            /* 找到了！创建临时 dentry */
+            extern struct vfs_dentry *vfs_alloc_dentry(const char *name, struct vfs_inode *inode);
+            extern struct vfs_inode *vfs_alloc_inode(struct vfs_superblock *sb, uint32_t ino);
+            
+            /* 提取文件名 */
+            const char *name = strrchr(path, '/');
+            name = name ? name + 1 : path;
+            
+            /* 创建临时 inode */
+            struct vfs_inode *inode = vfs_alloc_inode(NULL, 0);
+            if (inode) {
+                inode->size = fat_entry->file_size;
+                inode->private_data = fat_entry;
+                
+                /* 设置 FAT32 文件操作 */
+                extern struct vfs_file_operations fat32_file_ops;
+                inode->f_op = &fat32_file_ops;
+                
+                return vfs_alloc_dentry(name, inode);
+            }
+            
+            kfree(fat_entry);
+        }
+    }
+    
+    return NULL;
 }
 
 /* ========== 文件描述符管理 ========== */
@@ -303,6 +341,7 @@ int vfs_open(const char *path, int flags, int mode)
     file->f_op = dentry->inode->f_op;
     file->flags = flags;
     file->pos = 0;
+    file->private_data = dentry->inode->private_data;  // ← 传递 FAT32 目录项！
     
     /* 调用文件系统的open */
     if (file->f_op && file->f_op->open) {
@@ -408,6 +447,48 @@ int vfs_write(int fd, const char *buf, size_t count)
     }
     
     return file->f_op->write(file, buf, count);
+}
+
+/*
+ * lseek系统调用 - 改变文件读写位置
+ */
+off_t vfs_lseek(int fd, off_t offset, int whence)
+{
+    if (fd < 0 || fd >= VFS_MAX_OPEN_FILES) {
+        return -EINVAL;
+    }
+    
+    struct vfs_file *file = vfs_state.open_files[fd];
+    if (!file) {
+        return -EBADF;
+    }
+    
+    off_t new_pos;
+    
+    switch (whence) {
+        case SEEK_SET:
+            new_pos = offset;
+            break;
+        case SEEK_CUR:
+            new_pos = file->pos + offset;
+            break;
+        case SEEK_END:
+            if (!file->inode) {
+                return -EINVAL;
+            }
+            new_pos = file->inode->size + offset;
+            break;
+        default:
+            return -EINVAL;
+    }
+    
+    /* 不允许负数位置 */
+    if (new_pos < 0) {
+        return -EINVAL;
+    }
+    
+    file->pos = new_pos;
+    return new_pos;
 }
 
 /*
