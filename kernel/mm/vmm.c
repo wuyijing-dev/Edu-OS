@@ -6,8 +6,9 @@
 
 #include <mm/vmm.h>
 #include <mm/pmm.h>
-#include <string.h>
+#include <mm/kmalloc.h>
 #include <kernel.h>
+#include <string.h>
 
 /* 当前页目录 */
 static struct page_directory *current_directory = NULL;
@@ -30,6 +31,14 @@ static inline uint32_t pde_create(uint32_t pt_phys, uint32_t flags)
 static inline uint32_t pte_create(uint32_t page_phys, uint32_t flags)
 {
     return (page_phys & 0xFFFFF000) | (flags & 0xFFF);
+}
+
+/*
+ * 获取页目录项的物理地址（页表地址）
+ */
+static inline uint32_t pde_get_addr(uint32_t pde)
+{
+    return pde & 0xFFFFF000;
 }
 
 /*
@@ -135,8 +144,22 @@ struct page_directory *vmm_create_page_directory(void)
         return NULL;
     }
     
-    /* 临时映射并清空 */
-    // TODO: 实现临时映射机制
+    /* 通过临时映射访问新页目录（假设物理地址在低4MB） */
+    uint32_t *new_pd_virt = (uint32_t*)(pd->physical_addr + 0xC0000000);
+    
+    /* 清空整个页目录 */
+    memset(new_pd_virt, 0, 4096);
+    
+    /* 关键！复制内核空间映射（PD[768-1022]，即3GB-4GB，但不包括递归映射） */
+    uint32_t *current_pd = GET_PAGE_DIRECTORY();
+    for (int i = 768; i < 1023; i++) {  /* 注意：到1023之前，不包括1023 */
+        new_pd_virt[i] = current_pd[i];
+    }
+    
+    /* 设置递归映射：PD[1023]指向自己！ */
+    new_pd_virt[1023] = pde_create(pd->physical_addr, PAGE_PRESENT | PAGE_WRITE);
+    
+    /* 用户空间（PD[0-767]）保持为0，稍后按需映射 */
     
     return pd;
 }
@@ -175,6 +198,74 @@ void vmm_switch_page_directory(struct page_directory *pd)
 struct page_directory *vmm_get_current_page_directory(void)
 {
     return current_directory;
+}
+
+/*
+ * 在指定页目录中映射页（Linux方式：不切换CR3）
+ */
+void vmm_map_page_in_directory(struct page_directory *pd, uint32_t virt, uint32_t phys, uint32_t flags)
+{
+    if (!pd) return;
+    
+    uint32_t pd_index = PD_INDEX(virt);
+    uint32_t pt_index = PT_INDEX(virt);
+    
+    /* 通过物理地址直接访问页目录 */
+    uint32_t *page_directory = (uint32_t*)(pd->physical_addr + 0xC0000000);
+    
+    /* 检查页表是否存在 */
+    if (!pte_is_present(page_directory[pd_index])) {
+        /* 分配新页表 */
+        uint32_t pt_phys = pmm_alloc_frame();
+        if (pt_phys == 0) {
+            return;
+        }
+        
+        /* 清空新页表 */
+        memset((void*)(pt_phys + 0xC0000000), 0, 4096);
+        
+        /* 设置页目录项 */
+        page_directory[pd_index] = pde_create(pt_phys, PAGE_PRESENT | PAGE_WRITE | PAGE_USER);
+    }
+    
+    /* 获取页表 */
+    uint32_t pt_phys = pde_get_addr(page_directory[pd_index]);
+    uint32_t *page_table = (uint32_t*)(pt_phys + 0xC0000000);
+    
+    /* 设置页表项 */
+    page_table[pt_index] = pte_create(phys, flags);
+}
+
+/*
+ * 在指定页目录中查询虚拟地址的物理地址
+ */
+uint32_t vmm_virt_to_phys_in_directory(struct page_directory *pd, uint32_t virt)
+{
+    if (!pd) return 0;
+    
+    uint32_t pd_index = PD_INDEX(virt);
+    uint32_t pt_index = PT_INDEX(virt);
+    uint32_t offset = PAGE_OFFSET(virt);
+    
+    /* 通过物理地址直接访问页目录 */
+    uint32_t *page_directory = (uint32_t*)(pd->physical_addr + 0xC0000000);
+    
+    /* 检查页表是否存在 */
+    if (!pte_is_present(page_directory[pd_index])) {
+        return 0;
+    }
+    
+    /* 获取页表 */
+    uint32_t pt_phys = pde_get_addr(page_directory[pd_index]);
+    uint32_t *page_table = (uint32_t*)(pt_phys + 0xC0000000);
+    
+    /* 检查页是否存在 */
+    if (!pte_is_present(page_table[pt_index])) {
+        return 0;
+    }
+    
+    /* 返回物理地址 */
+    return pte_get_addr(page_table[pt_index]) + offset;
 }
 
 /*

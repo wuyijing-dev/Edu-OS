@@ -1,84 +1,15 @@
 /*
- * sys_process.c - 进程管理相关系统调用
+ * wait.c - 进程等待机制（wait/waitpid系统调用）
  */
 
-#include <syscall.h>
-#include <fs/vfs.h>
-#include <kernel.h>
 #include <process/process.h>
+#include <kernel.h>
+#include <string.h>
 
-/*
- * sys_getpid - 获取当前进程ID
- */
-int sys_getpid(void)
-{
-    struct process *current = process_get_current();
-    
-    if (!current) {
-        return -1;
-    }
-    
-    return current->pid;
-}
+/* 外部函数：遍历进程列表 */
+extern struct process *process_list_head;
 
-/*
- * sys_getppid - 获取父进程ID
- */
-int sys_getppid(void)
-{
-    struct process *current = process_get_current();
-    
-    if (!current || !current->parent) {
-        return -1;
-    }
-    
-    return current->parent->pid;
-}
-
-/*
- * sys_exit - 退出当前进程
- */
-int sys_exit(int status)
-{
-    kprintf("\n[SYSCALL] User program exited with status %d\n", status);
-    kprintf("[SYSCALL] Returning to kernel...\n");
-    
-    /* 简化：直接停止（真正的实现会切换到其他进程） */
-    kprintf("\n[SUCCESS] User mode program executed successfully!\n");
-    kprintf("[INFO] In a full implementation, would return to scheduler\n");
-    
-    /* 停止系统（演示用） */
-    while (1) {
-        asm("hlt");
-    }
-    
-    return 0;
-}
-
-/*
- * sys_fork - 创建子进程
- */
-int sys_fork(void)
-{
-    /* TODO: 实现 fork */
-    kprintf("[SYSCALL] sys_fork not yet implemented\n");
-    return -ENOSYS;
-}
-
-/*
- * sys_execve - 执行程序
- */
-int sys_execve(const char *path, char *const argv[], char *const envp[])
-{
-    /* TODO: 实现 execve */
-    (void)path;
-    (void)argv;
-    (void)envp;
-    kprintf("[SYSCALL] sys_execve not yet implemented\n");
-    return -ENOSYS;
-}
-
-/* 查找已终止的子进程 */
+/* 进程状态检查 */
 static struct process *find_zombie_child(struct process *parent)
 {
     if (!parent) {
@@ -86,7 +17,9 @@ static struct process *find_zombie_child(struct process *parent)
     }
     
     /* 遍历所有进程，找到已终止的子进程 */
-    struct process *proc = parent;
+    extern struct process *process_list_head;
+    struct process *proc = process_list_head;
+    
     while (proc) {
         if (proc->parent == parent && 
             proc->state == PROCESS_STATE_TERMINATED) {
@@ -100,6 +33,9 @@ static struct process *find_zombie_child(struct process *parent)
 
 /*
  * sys_wait - 等待任意子进程退出
+ * 
+ * @param status: 存储子进程退出状态
+ * @return: 子进程PID，出错返回-1
  */
 pid_t sys_wait(int *status)
 {
@@ -123,23 +59,34 @@ pid_t sys_wait(int *status)
         /* 清理子进程资源 */
         process_destroy(child);
         
+        kprintf("[WAIT] Parent %u reaped child %u\n", current->pid, child_pid);
+        
         return child_pid;
     }
     
     /* 没有子进程退出，阻塞等待 */
+    kprintf("[WAIT] Process %u waiting for children\n", current->pid);
+    
+    /* 阻塞当前进程 */
     current->state = PROCESS_STATE_BLOCKED;
     
     /* 触发调度，切换到其他进程 */
     extern void scheduler_schedule(void);
     scheduler_schedule();
     
-    return -EINTR;
+    /* 被唤醒后重新检查（正常情况下不会返回到这里） */
+    return -EINTR;  /* Interrupted */
 }
 
 /*
- * sys_waitpid - 等待子进程
+ * sys_waitpid - 等待指定子进程退出
+ * 
+ * @param pid: 要等待的进程ID
+ * @param status: 存储子进程退出状态
+ * @param options: 选项（WNOHANG等）
+ * @return: 子进程PID，出错返回-1
  */
-int sys_waitpid(pid_t pid, int *status, int options)
+pid_t sys_waitpid(pid_t pid, int *status, int options)
 {
     struct process *current = process_get_current();
     
@@ -147,7 +94,9 @@ int sys_waitpid(pid_t pid, int *status, int options)
         return -ESRCH;
     }
     
-    /* 查找指定的子进程 */
+    kprintf("[WAITPID] Process %u waiting for child %u\n", current->pid, pid);
+    
+    /* TODO: 查找指定的子进程 */
     struct process *child = process_find_by_pid(pid);
     
     if (!child || child->parent != current) {
@@ -173,6 +122,8 @@ int sys_waitpid(pid_t pid, int *status, int options)
     }
     
     /* 阻塞等待 */
+    kprintf("[WAITPID] Process %u blocked, waiting for child %u\n", current->pid, pid);
+    
     current->state = PROCESS_STATE_BLOCKED;
     
     /* 触发调度 */
@@ -182,4 +133,3 @@ int sys_waitpid(pid_t pid, int *status, int options)
     /* 被唤醒后返回 */
     return pid;
 }
-

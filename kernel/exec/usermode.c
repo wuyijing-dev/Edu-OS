@@ -45,11 +45,8 @@ void switch_to_user_mode(uint32_t entry, uint32_t stack)
     );
 }
 
-/* 外部函数 */
-extern int create_simple_user_process(void);
-
 /*
- * 测试用户态
+ * 测试用户态（已废弃，使用 elf_exec 替代）
  */
 void test_user_mode(void)
 {
@@ -61,17 +58,8 @@ void test_user_mode(void)
     
     kprintf("[USER] GDT user segments added ✅\n");
     kprintf("[USER] System calls ready ✅\n");
-    kprintf("[USER] Creating first user process...\n\n");
-    
-    /* 创建并运行简单的用户进程 */
-    int ret = create_simple_user_process();
-    
-    if (ret < 0) {
-        kprintf("[ERROR] Failed to create user process: %d\n", ret);
-    }
-    
-    /* 如果用户进程退出，会回到这里 */
-    kprintf("\n[USER] Returned from user mode\n");
+    kprintf("[INFO] Use elf_exec() to run user programs\n");
+    kprintf("[INFO] Example: elf_exec(\"/hello.elf\")\n\n");
     
     kprintf("\n");
     kprintf("================================================================================\n");

@@ -103,6 +103,26 @@ struct page_directory *vmm_get_current_page_directory(void);
 void vmm_map_page(uint32_t virt, uint32_t phys, uint32_t flags);
 
 /*
+ * 在指定页目录中映射页（Linux方式：不切换CR3）
+ * 
+ * @param pd: 目标页目录
+ * @param virt: 虚拟地址
+ * @param phys: 物理地址
+ * @param flags: 页标志
+ */
+void vmm_map_page_in_directory(struct page_directory *pd, uint32_t virt, 
+                                uint32_t phys, uint32_t flags);
+
+/*
+ * 在指定页目录中查询虚拟地址的物理地址
+ * 
+ * @param pd: 目标页目录
+ * @param virt: 虚拟地址
+ * @return: 物理地址，如果未映射返回0
+ */
+uint32_t vmm_virt_to_phys_in_directory(struct page_directory *pd, uint32_t virt);
+
+/*
  * 取消映射单个页
  * 
  * @param virt: 虚拟地址

@@ -1,204 +1,299 @@
 /*
- * user_process.c - 用户态进程创建和管理
+ * user_process.c - 用户进程创建和管理
+ * 
+ * 实现独立用户页表和进程地址空间管理
  */
 
 #include <kernel.h>
-#include <fs/vfs.h>
 #include <process/process.h>
 #include <mm/vmm.h>
 #include <mm/pmm.h>
+#include <mm/kmalloc.h>
+#include <fs/vfs.h>
 #include <string.h>
+#include <elf.h>
+
+/* 外部函数 */
+extern void switch_to_user_mode(uint32_t entry, uint32_t stack);
+extern uint32_t tss_get_address(void);
+extern void tss_set_kernel_stack(uint32_t stack);
 
 /*
- * 创建用户进程的页目录
+ * 为用户进程创建独立页表
+ * 
+ * 布局：
+ *   0x00000000 - 0xBFFFFFFF: 用户空间（3GB）
+ *   0xC0000000 - 0xFFFFFFFF: 内核空间（1GB，共享）
  */
-uint32_t *create_user_page_directory(void)
+static struct page_directory *create_user_page_directory(void)
 {
-    /* 分配页目录 */
-    uint32_t *pd = (uint32_t*)pmm_alloc_frame();
+    /* 创建新页目录 */
+    struct page_directory *pd = vmm_create_page_directory();
     if (!pd) {
         return NULL;
     }
     
-    /* 转换为虚拟地址（内核空间） */
-    uint32_t *pd_virt = (uint32_t*)((uint32_t)pd + 0xC0000000);
+    kprintf("[USER_PROC] Created user page directory at phys 0x%08x\n", pd->physical_addr);
     
-    /* 清空页目录 */
-    memset(pd_virt, 0, 4096);
-    
-    /* 复制内核空间映射（3GB-4GB） */
-    /* 用户进程需要访问内核（系统调用时） */
-    /* 简化：使用当前页目录的内核映射 */
-    uint32_t *current_pd;
-    asm volatile("mov %%cr3, %0" : "=r"(current_pd));
-    uint32_t *current_pd_virt = (uint32_t*)((uint32_t)current_pd + 0xC0000000);
-    
-    for (int i = 768; i < 1024; i++) {
-        pd_virt[i] = current_pd_virt[i];
-    }
+    /* 内核空间映射已经由 vmm_create_page_directory() 复制 */
+    /* 用户空间目前为空，会在加载ELF时按需映射 */
     
     return pd;
 }
 
 /*
- * 为用户进程映射一个页
+ * 创建用户进程
+ * 
+ * @param name: 进程名
+ * @param elf_path: ELF可执行文件路径
+ * @return: 新进程的PID，失败返回负数
  */
-int map_user_page(uint32_t *pd, uint32_t vaddr, uint32_t paddr, uint32_t flags)
+pid_t create_user_process(const char *name, const char *elf_path)
 {
-    uint32_t pd_index = vaddr >> 22;
-    uint32_t pt_index = (vaddr >> 12) & 0x3FF;
+    kprintf("[USER_PROC] Creating user process: %s (ELF: %s)\n", name, elf_path);
     
-    /* 转换页目录为虚拟地址 */
-    uint32_t *pd_virt = (uint32_t*)((uint32_t)pd + 0xC0000000);
-    
-    /* 检查页表是否存在 */
-    if (!(pd_virt[pd_index] & 0x1)) {
-        /* 分配新页表 */
-        uint32_t pt = pmm_alloc_frame();
-        if (!pt) {
-            return -ENOMEM;
-        }
-        
-        /* 清空页表 */
-        uint32_t *pt_virt = (uint32_t*)(pt + 0xC0000000);
-        memset(pt_virt, 0, 4096);
-        
-        /* 设置页目录项 */
-        pd_virt[pd_index] = pt | flags | 0x1;  // Present
+    /* 1. 打开ELF文件 */
+    int fd = vfs_open(elf_path, O_RDONLY, 0);
+    if (fd < 0) {
+        kprintf("[USER_PROC] Failed to open ELF file: %d\n", fd);
+        return -1;
     }
     
-    /* 获取页表 */
-    uint32_t pt = pd_virt[pd_index] & ~0xFFF;
-    uint32_t *pt_virt = (uint32_t*)(pt + 0xC0000000);
+    /* 2. 读取ELF头 */
+    Elf32_Ehdr ehdr;
+    if (vfs_read(fd, (char*)&ehdr, sizeof(ehdr)) != sizeof(ehdr)) {
+        vfs_close(fd);
+        return -1;
+    }
     
-    /* 设置页表项 */
-    pt_virt[pt_index] = paddr | flags | 0x1;
+    /* 3. 验证ELF */
+    if (ehdr.e_ident[EI_MAG0] != 0x7F || ehdr.e_ident[EI_MAG1] != 'E' ||
+        ehdr.e_ident[EI_MAG2] != 'L' || ehdr.e_ident[EI_MAG3] != 'F') {
+        kprintf("[USER_PROC] Not an ELF file\n");
+        vfs_close(fd);
+        return -1;
+    }
     
-    return 0;
+    /* 4. 创建进程控制块 */
+    struct process *proc = (struct process*)kmalloc(sizeof(struct process));
+    if (!proc) {
+        vfs_close(fd);
+        return -1;
+    }
+    
+    memset(proc, 0, sizeof(struct process));
+    strncpy(proc->name, name, sizeof(proc->name) - 1);
+    proc->pid = process_allocate_pid();
+    proc->state = PROCESS_STATE_NEW;
+    proc->priority = 120;  // 普通优先级
+    
+    /* 5. 创建独立页表 */
+    proc->page_dir = create_user_page_directory();
+    if (!proc->page_dir) {
+        kfree(proc);
+        vfs_close(fd);
+        return -1;
+    }
+    
+    /* 6. 分配内核栈 */
+    proc->kernel_stack_size = 8192;  // 8KB
+    uint32_t stack_phys = pmm_alloc_frame();
+    if (!stack_phys) {
+        vmm_destroy_page_directory(proc->page_dir);
+        kfree(proc);
+        vfs_close(fd);
+        return -1;
+    }
+    
+    /* 映射内核栈到内核空间 */
+    uint32_t stack_virt = 0xC0000000 + stack_phys;  // 临时映射
+    proc->kernel_stack = stack_virt + proc->kernel_stack_size;
+    
+    kprintf("[USER_PROC] Process %s created:\n", name);
+    kprintf("            PID: %u\n", proc->pid);
+    kprintf("            Page Dir: 0x%08x\n", proc->page_dir->physical_addr);
+    kprintf("            Kernel Stack: 0x%08x\n", proc->kernel_stack);
+    
+    /* 7. 读取程序头表 */
+    Elf32_Phdr *phdrs = kmalloc(sizeof(Elf32_Phdr) * ehdr.e_phnum);
+    if (!phdrs) {
+        vmm_destroy_page_directory(proc->page_dir);
+        kfree(proc);
+        vfs_close(fd);
+        return -1;
+    }
+    
+    vfs_read(fd, (char*)phdrs, sizeof(Elf32_Phdr) * ehdr.e_phnum);
+    
+    /* Linux方式：不切换页表，在内核态完成所有设置 */
+    kprintf("[USER_PROC] Loading ELF in kernel context (Linux style)\n");
+    
+    /* 8. 加载ELF段到用户空间 */
+    /* Linux方式：为新进程的页表手动设置映射，而不切换CR3 */
+    for (int i = 0; i < ehdr.e_phnum; i++) {
+        Elf32_Phdr *ph = &phdrs[i];
+        
+        if (ph->p_type != PT_LOAD) {
+            continue;
+        }
+        
+        kprintf("[USER_PROC] Preparing segment %d: vaddr=0x%08x, size=%u\n",
+                i, ph->p_vaddr, ph->p_memsz);
+        
+        /* 为每个页分配物理内存并设置到新进程的页表中 */
+        uint32_t vaddr_start = ph->p_vaddr & ~0xFFF;
+        uint32_t vaddr_end = (ph->p_vaddr + ph->p_memsz + 0xFFF) & ~0xFFF;
+        
+        for (uint32_t vaddr = vaddr_start; vaddr < vaddr_end; vaddr += 4096) {
+            uint32_t paddr = pmm_alloc_frame();
+            if (!paddr) {
+                kfree(phdrs);
+                vmm_destroy_page_directory(proc->page_dir);
+                kfree(proc);
+                vfs_close(fd);
+                return -1;
+            }
+            
+            /* 通过内核直接映射清零页 */
+            if (paddr < 0x400000) {
+                memset((void*)(paddr + 0xC0000000), 0, 4096);
+            }
+            
+            /* 手动设置新进程页表的映射（通过直接访问页表结构）*/
+            uint32_t flags = 0x01 | 0x04;  /* PRESENT | USER */
+            if (ph->p_flags & PF_W) flags |= 0x02;  /* WRITABLE */
+            
+            /* 在新进程的页表中创建映射 */
+            vmm_map_page_in_directory(proc->page_dir, vaddr, paddr, flags);
+        }
+        
+        /* 读取段数据并写入到物理页 */
+        if (ph->p_filesz > 0) {
+            vfs_lseek(fd, ph->p_offset, SEEK_SET);
+            
+            char *buffer = kmalloc(ph->p_filesz);
+            if (buffer) {
+                vfs_read(fd, buffer, ph->p_filesz);
+                
+                /* 复制数据到物理页（通过物理地址） */
+                uint32_t page_offset = ph->p_vaddr & 0xFFF;
+                uint32_t vaddr = ph->p_vaddr & ~0xFFF;
+                uint32_t bytes_copied = 0;
+                
+                while (bytes_copied < ph->p_filesz) {
+                    /* 获取此虚拟页对应的物理地址 */
+                    uint32_t paddr = vmm_virt_to_phys_in_directory(proc->page_dir, vaddr);
+                    if (paddr) {
+                        uint32_t copy_size = 4096 - page_offset;
+                        if (copy_size > ph->p_filesz - bytes_copied) {
+                            copy_size = ph->p_filesz - bytes_copied;
+                        }
+                        
+                        /* 通过直接映射写入 */
+                        memcpy((void*)(paddr + 0xC0000000 + page_offset), 
+                               buffer + bytes_copied, copy_size);
+                        
+                        bytes_copied += copy_size;
+                        vaddr += 4096;
+                        page_offset = 0;
+                    } else {
+                        break;
+                    }
+                }
+                
+                kfree(buffer);
+            }
+        }
+    }
+    
+    kfree(phdrs);
+    vfs_close(fd);
+    
+    /* 9. 设置用户栈（0x08100000）*/
+    uint32_t user_stack_top = 0x08100000;
+    for (int i = 0; i < 2; i++) {
+        uint32_t paddr = pmm_alloc_frame();
+        if (paddr && paddr < 0x400000) {
+            memset((void*)(paddr + 0xC0000000), 0, 4096);
+        }
+        /* 在新进程的页表中映射栈 */
+        vmm_map_page_in_directory(proc->page_dir, user_stack_top - (i+1)*4096, 
+                                  paddr, 0x07);  /* USER|WRITE|PRESENT */
+    }
+    
+    /* 10. 初始化进程上下文（用户态）*/
+    memset(&proc->context, 0, sizeof(struct cpu_context));
+    proc->context.eip = ehdr.e_entry;
+    proc->context.esp = user_stack_top;
+    proc->context.eflags = 0x202;  /* IF=1 */
+    proc->context.cs = 0x1B;       /* 用户代码段 (RPL=3) */
+    
+    /* 11. 添加到调度器（调度器会在真正运行时切换CR3） */
+    extern void scheduler_add_process(struct process *proc);
+    scheduler_add_process(proc);
+    
+    kprintf("[USER_PROC] Process created successfully\n");
+    kprintf("            Ready to run at entry: 0x%08x\n", ehdr.e_entry);
+    
+    return proc->pid;
 }
 
 /*
- * 创建简单的用户进程（内置代码）
+ * 从当前进程执行ELF（类似execve）
+ * 
+ * 会替换当前进程的地址空间
  */
-int create_simple_user_process(void)
+int do_exec(const char *path, char *argv[], char *envp[])
 {
-    kprintf("\n[USER] Creating first user process...\n");
+    (void)argv;
+    (void)envp;
     
-    /* 简单的用户代码：调用 sys_exit(42) */
-    uint8_t user_code[] = {
-        0xB8, 0x01, 0x00, 0x00, 0x00,  // mov eax, 1 (SYS_exit)
-        0xBB, 0x2A, 0x00, 0x00, 0x00,  // mov ebx, 42 (退出码)
-        0xCD, 0x80,                     // int 0x80
-        0xEB, 0xFE                      // jmp $ (不应执行到)
-    };
+    kprintf("[USER_PROC] Executing: %s\n", path);
     
-    /* 创建页目录 */
-    uint32_t *pd = create_user_page_directory();
-    if (!pd) {
-        kprintf("[ERROR] Failed to create page directory\n");
-        return -ENOMEM;
+    struct process *proc = process_get_current();
+    if (!proc) {
+        return -ESRCH;
     }
     
-    kprintf("[OK] User page directory created at 0x%08x\n", (uint32_t)pd);
-    
-    /* 分配用户代码页（地址 0x08000000） */
-    uint32_t code_page = pmm_alloc_frame();
-    if (!code_page) {
-        kprintf("[ERROR] Failed to allocate code page\n");
-        return -ENOMEM;
+    /* 1. 打开ELF文件 */
+    int fd = vfs_open(path, O_RDONLY, 0);
+    if (fd < 0) {
+        return fd;
     }
     
-    /* 复制代码到物理页 */
-    uint8_t *code_virt = (uint8_t*)(code_page + 0xC0000000);
-    memcpy(code_virt, user_code, sizeof(user_code));
-    
-    /* 映射到用户空间 */
-    int ret = map_user_page(pd, 0x08000000, code_page, 
-                            0x04 | 0x02);  // USER | WRITABLE
-    if (ret < 0) {
-        kprintf("[ERROR] Failed to map code page\n");
-        return ret;
+    /* 2. 读取并验证ELF头 */
+    Elf32_Ehdr ehdr;
+    if (vfs_read(fd, (char*)&ehdr, sizeof(ehdr)) != sizeof(ehdr)) {
+        vfs_close(fd);
+        return -EIO;
     }
     
-    kprintf("[OK] User code mapped at 0x08000000\n");
-    
-    /* 分配用户栈页（地址 0x08100000 - 8KB） */
-    for (int i = 0; i < 2; i++) {
-        uint32_t stack_page = pmm_alloc_frame();
-        if (!stack_page) {
-            kprintf("[ERROR] Failed to allocate stack page\n");
-            return -ENOMEM;
-        }
-        
-        /* 清零栈 */
-        memset((void*)(stack_page + 0xC0000000), 0, 4096);
-        
-        /* 映射栈页 */
-        ret = map_user_page(pd, 0x08100000 - (i + 1) * 4096, stack_page,
-                           0x04 | 0x02);  // USER | WRITABLE
-        if (ret < 0) {
-            kprintf("[ERROR] Failed to map stack page\n");
-            return ret;
-        }
-    }
-    
-    kprintf("[OK] User stack mapped at 0x08100000 (8KB)\n");
-    
-    kprintf("[USER] Verifying kernel mappings in user page directory...\n");
-    
-    /* 验证内核映射 */
-    uint32_t *pd_virt = (uint32_t*)((uint32_t)pd + 0xC0000000);
-    bool kernel_mapped = (pd_virt[768] & 0x1) != 0;  // 检查 3GB 处
-    kprintf("[USER] Kernel space mapped: %s\n", kernel_mapped ? "YES" : "NO");
-    
-    if (!kernel_mapped) {
-        kprintf("[ERROR] Kernel not mapped! Cannot switch page directory!\n");
+    if (ehdr.e_ident[EI_MAG0] != 0x7F || ehdr.e_ident[EI_MAG1] != 'E' ||
+        ehdr.e_ident[EI_MAG2] != 'L' || ehdr.e_ident[EI_MAG3] != 'F') {
+        vfs_close(fd);
         return -EINVAL;
     }
     
-    kprintf("[USER] Ready to jump to user mode!\n");
-    kprintf("[USER] User code entry: 0x08000000\n");
-    kprintf("[USER] User stack top:   0x08100000\n");
-    kprintf("[USER] Page directory:   0x%08x\n\n", (uint32_t)pd);
+    /* 3. 清空当前用户空间（保留内核映射） */
+    if (proc->page_dir) {
+        /* 只清空用户空间页（0-3GB） */
+        /* 现在简化：创建新页表 */
+        struct page_directory *old_pd = proc->page_dir;
+        proc->page_dir = vmm_create_page_directory();
+        if (!proc->page_dir) {
+            proc->page_dir = old_pd;
+            vfs_close(fd);
+            return -ENOMEM;
+        }
+        vmm_destroy_page_directory(old_pd);
+    }
     
-    kprintf("[USER] Executing user code (will call sys_exit(42))...\n");
-    kprintf("[USER] Note: System will handle triple fault if something goes wrong\n\n");
+    /* 4. 加载新ELF（类似create_user_process） */
+    /* 这里简化：直接调用elf_exec */
+    extern int elf_exec(const char *path);
     
-    /* 刷新 TLB */
-    asm volatile("mov %%cr3, %%eax; mov %%eax, %%cr3" ::: "eax");
+    vfs_close(fd);
     
-    /* 切换到用户页目录 */
-    kprintf("[USER] Switching page directory...\n");
-    asm volatile("mov %0, %%cr3" : : "r"(pd));
-    kprintf("[OK] Page directory switched\n");
-    
-    /* 切换到用户态并执行 */
-    asm volatile(
-        /* 设置数据段为用户态 */
-        "mov $0x23, %%ax\n"
-        "mov %%ax, %%ds\n"
-        "mov %%ax, %%es\n"
-        "mov %%ax, %%fs\n"
-        "mov %%ax, %%gs\n"
-        
-        /* 构造 IRET 栈帧 */
-        "pushl $0x23\n"           // SS
-        "pushl $0x08100000\n"     // ESP
-        "pushf\n"                 // EFLAGS
-        "popl %%eax\n"
-        "orl $0x200, %%eax\n"     // IF=1
-        "pushl %%eax\n"
-        "pushl $0x1B\n"           // CS
-        "pushl $0x08000000\n"     // EIP
-        
-        /* 跳转到用户态 */
-        "iret\n"
-        :
-        :
-        : "eax"
-    );
-    
-    /* 不会执行到这里 */
-    return 0;
+    /* 注意：elf_exec不会返回 */
+    return elf_exec(path);
 }
-

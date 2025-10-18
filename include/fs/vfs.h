@@ -42,8 +42,10 @@
 /* 错误码 */
 #define ENOENT      2    /* No such file or directory */
 #define ESRCH       3    /* No such process */
+#define EINTR       4    /* Interrupted system call */
 #define EIO         5    /* I/O error */
 #define EBADF       9    /* Bad file descriptor */
+#define ECHILD      10   /* No child processes */
 #define ENOMEM      12   /* Out of memory */
 #define EFAULT      14   /* Bad address */
 #define EEXIST      17   /* File exists */
@@ -51,9 +53,11 @@
 #define EISDIR      21   /* Is a directory */
 #define EINVAL      22   /* Invalid argument */
 #define ENOSPC      28   /* No space left on device */
+#define ENAMETOOLONG 36  /* File name too long */
 #define ENOSYS      38   /* Function not implemented */
 #define ENOTEMPTY   39   /* Directory not empty */
-#define ENAMETOOLONG 36  /* File name too long */
+#define EPIPE       32   /* Broken pipe */
+#define EAGAIN      11   /* Try again */
 
 /* 设备号操作宏 */
 #define MINORBITS   20

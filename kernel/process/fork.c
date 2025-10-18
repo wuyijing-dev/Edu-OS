@@ -65,8 +65,11 @@ static int copy_process_memory(struct process *parent, struct process *child)
         return -ENOMEM;
     }
     
-    /* TODO: 复制用户空间的所有页 */
-    /* 使用写时复制（Copy-On-Write）优化 */
+    /* Copy-On-Write已在copy_page_directory中实现 */
+    /* 父子进程共享只读页，写入时触发Page Fault并复制 */
+    
+    kprintf("[FORK] Memory copied using COW (parent=%u, child=%u)\n", 
+            parent->pid, child->pid);
     
     return 0;
 }
@@ -130,9 +133,11 @@ int do_fork(void)
     /* 子进程的返回值 = 0 */
     child->context.eax = 0;
     
-    /* TODO: 加入调度器 */
+    /* 加入调度器 */
+    extern void scheduler_add_process(struct process *proc);
+    scheduler_add_process(child);
     
-    kprintf("[FORK] Created child process PID %u\n", child->pid);
+    kprintf("[FORK] Created child process PID %u, added to scheduler\n", child->pid);
     
     /* 父进程返回子进程 PID */
     return child->pid;

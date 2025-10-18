@@ -13,8 +13,12 @@
 static uint32_t next_pid = 1;
 static uint32_t process_count = 0;
 
-/* 所有进程链表 */
+/* 所有进程链表（双向链表）*/
 static struct process *process_list_head = NULL;
+static struct process *process_list_tail = NULL;
+
+/* 当前运行进程 */
+static struct process *current_process = NULL;
 
 /*
  * 进程管理器初始化
@@ -26,8 +30,64 @@ void process_init(void)
     next_pid = 1;
     process_count = 0;
     process_list_head = NULL;
+    process_list_tail = NULL;
+    current_process = NULL;
     
     kprintf("[PROCESS] Process Manager initialized\n\n");
+}
+
+/*
+ * 添加进程到链表
+ */
+static void add_process_to_list(struct process *proc)
+{
+    if (!proc) {
+        return;
+    }
+    
+    proc->next = NULL;
+    proc->prev = NULL;
+    
+    if (!process_list_head) {
+        /* 第一个进程 */
+        process_list_head = proc;
+        process_list_tail = proc;
+    } else {
+        /* 添加到尾部 */
+        process_list_tail->next = proc;
+        proc->prev = process_list_tail;
+        process_list_tail = proc;
+    }
+    
+    process_count++;
+}
+
+/*
+ * 从链表移除进程
+ */
+static void remove_process_from_list(struct process *proc)
+{
+    if (!proc) {
+        return;
+    }
+    
+    if (proc->prev) {
+        proc->prev->next = proc->next;
+    } else {
+        /* 是头节点 */
+        process_list_head = proc->next;
+    }
+    
+    if (proc->next) {
+        proc->next->prev = proc->prev;
+    } else {
+        /* 是尾节点 */
+        process_list_tail = proc->prev;
+    }
+    
+    proc->next = NULL;
+    proc->prev = NULL;
+    process_count--;
 }
 
 /*
@@ -210,7 +270,8 @@ void process_destroy(struct process *proc)
     
     /* 释放页目录（如果有独立的） */
     if (proc->page_dir) {
-        // TODO: 释放页目录
+        vmm_destroy_page_directory(proc->page_dir);
+        proc->page_dir = NULL;
     }
     
     /* 释放PCB */
