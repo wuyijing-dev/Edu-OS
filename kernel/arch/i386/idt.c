@@ -55,7 +55,8 @@ static void idt_install_isrs(void)
     idt_set_gate(11, (uint32_t)isr11, 0x08, IDT_ATTR_INTERRUPT);
     idt_set_gate(12, (uint32_t)isr12, 0x08, IDT_ATTR_INTERRUPT);
     idt_set_gate(13, (uint32_t)isr13, 0x08, IDT_ATTR_INTERRUPT);
-    idt_set_gate(14, (uint32_t)isr14, 0x08, IDT_ATTR_INTERRUPT);
+    /* Page Fault 必须允许用户态触发（DPL=3），因为按需分配需要处理用户空间缺页 */
+    idt_set_gate(14, (uint32_t)isr14, 0x08, IDT_ATTR_PRESENT | IDT_ATTR_DPL3 | IDT_TYPE_INT32);
     idt_set_gate(15, (uint32_t)isr15, 0x08, IDT_ATTR_INTERRUPT);
     idt_set_gate(16, (uint32_t)isr16, 0x08, IDT_ATTR_INTERRUPT);
     idt_set_gate(17, (uint32_t)isr17, 0x08, IDT_ATTR_INTERRUPT);
@@ -118,6 +119,12 @@ void idt_init(void)
     /* 安装ISR和IRQ */
     idt_install_isrs();
     idt_install_irqs();
+    
+    /* 调试：验证 Page Fault 的 IDT 门设置 */
+    kprintf("[IDT] Page Fault gate (14): offset=0x%08x, selector=0x%04x, attr=0x%02x\n",
+            (idt[14].offset_high << 16) | idt[14].offset_low,
+            idt[14].selector,
+            idt[14].type_attr);
     
     /* 加载IDT到CPU */
     __asm__ volatile("lidt %0" : : "m"(idtp));

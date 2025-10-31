@@ -28,13 +28,23 @@ gcc -m32 -ffreestanding -nostdlib -nostdinc -fno-builtin \
     -I${LIBC_DIR} \
     -c "$PROGRAM" -o "${BASENAME}.o"
 
-# 2. 链接 libc.a
+# 2. 链接 libc.a（使用Linux风格链接脚本）
 echo "[2/3] Linking with libc.a..."
-ld -m elf_i386 -nostdlib \
-    -Ttext=0x08000000 \
-    "${BASENAME}.o" \
-    "${LIBC_DIR}/libc.a" \
-    -o "$OUTPUT"
+if [ -f "user.ld" ]; then
+    echo "    Using user.ld linker script"
+    ld -m elf_i386 -nostdlib \
+        -T user.ld \
+        "${BASENAME}.o" \
+        "${LIBC_DIR}/libc.a" \
+        -o "$OUTPUT"
+else
+    echo "    Warning: user.ld not found, using -Ttext"
+    ld -m elf_i386 -nostdlib \
+        -Ttext=0x08000000 \
+        "${BASENAME}.o" \
+        "${LIBC_DIR}/libc.a" \
+        -o "$OUTPUT"
+fi
 
 # 3. 查看信息
 echo "[3/3] Build complete!"

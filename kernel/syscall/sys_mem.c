@@ -7,27 +7,116 @@
 #include <kernel.h>
 #include <mm/vmm.h>
 #include <mm/kmalloc.h>
+#include <mm/vma.h>
+#include <process/process.h>
 
 /*
- * sys_brk - 改变数据段大小
+ * sys_brk - 改变数据段大小（Linux风格实现）
  * 
  * Linux 用于实现 malloc
- * 简化实现：返回当前 brk 值，实际内存分配由 mmap 完成
+ * 使用VMA管理堆空间，支持按需分配
+ * 
+ * @param addr: 新的brk地址（页对齐）
+ * @return: 成功返回新brk，失败返回旧brk
  */
 void *sys_brk(void *addr)
 {
-    /* 简化实现：维护一个简单的brk指针 */
-    static void *current_brk = (void*)0x10000000;  /* 256MB起始 */
+    extern struct process *process_get_current(void);
+    struct process *proc = process_get_current();
     
-    if (addr == NULL) {
-        /* 查询当前 brk */
+    if (!proc) {
+        return (void*)-1;
+    }
+    
+    /* 堆起始地址（通常在BSS段之后）*/
+    static void *heap_start = NULL;
+    static void *current_brk = NULL;
+    
+    /* 首次调用：初始化堆 */
+    if (heap_start == NULL) {
+        heap_start = (void*)0x10000000;  /* 256MB处开始 */
+        current_brk = heap_start;
+        
+        kprintf("[BRK] Heap initialized at 0x%08x\n", (uint32_t)heap_start);
+    }
+    
+    /* 查询当前brk */
+    if (addr == NULL || addr == (void*)0) {
         return current_brk;
     }
     
-    /* TODO: 验证地址范围合法性 */
-    /* TODO: 分配/释放内存页 */
+    /* 验证地址范围 */
+    if (addr < heap_start) {
+        /* 不能缩小到堆起始之前 */
+        kprintf("[BRK] Error: addr < heap_start\n");
+        return current_brk;
+    }
     
-    /* 简化：直接更新 brk */
+    if ((uint32_t)addr >= 0xC0000000) {
+        /* 不能进入内核空间 */
+        kprintf("[BRK] Error: addr in kernel space\n");
+        return current_brk;
+    }
+    
+    /* 页对齐 */
+    uint32_t new_brk = ((uint32_t)addr + 0xFFF) & ~0xFFF;
+    uint32_t old_brk = ((uint32_t)current_brk + 0xFFF) & ~0xFFF;
+    
+    if (new_brk > old_brk) {
+        /* 扩展堆：创建新的VMA */
+        extern struct vma *vma_create(uint32_t start, uint32_t end, uint32_t flags);
+        extern void vma_add(struct vma **list, struct vma *vma);
+        
+        /* 检查是否已有堆VMA */
+        extern struct vma *vma_find(struct vma *list, uint32_t addr);
+        struct vma *existing = vma_find(proc->vma_list, old_brk);
+        
+        if (existing && existing->start == (uint32_t)heap_start) {
+            /* 已有堆VMA，扩展它 */
+            existing->end = new_brk;
+            kprintf("[BRK] Extended heap VMA: 0x%08x-0x%08x\n", 
+                    existing->start, existing->end);
+        } else {
+            /* 创建新的堆VMA */
+            struct vma *heap_vma = vma_create(old_brk, new_brk,
+                                              0x01 | 0x02 | 0x80);  /* READ|WRITE|ANONYMOUS */
+            if (heap_vma) {
+                heap_vma->fd = -1;
+                vma_add(&proc->vma_list, heap_vma);
+                
+                kprintf("[BRK] Created heap VMA: 0x%08x-0x%08x (%u KB)\n",
+                        old_brk, new_brk, (new_brk - old_brk) / 1024);
+            } else {
+                return current_brk;  /* 失败 */
+            }
+        }
+    } else if (new_brk < old_brk) {
+        /* 缩小堆：释放VMA和页面 */
+        extern struct vma *vma_find(struct vma *list, uint32_t addr);
+        struct vma *vma = vma_find(proc->vma_list, old_brk - 4096);
+        
+        if (vma && vma->start == (uint32_t)heap_start) {
+            /* 缩小堆VMA */
+            vma->end = new_brk;
+            
+            /* 释放多余的页面 */
+            extern uint32_t vmm_virt_to_phys_in_directory(struct page_directory *pd, uint32_t virt);
+            extern void pmm_free_frame(uint32_t addr);
+            extern void vmm_unmap_page(uint32_t virt);
+            
+            for (uint32_t va = new_brk; va < old_brk; va += 4096) {
+                uint32_t paddr = vmm_virt_to_phys_in_directory(proc->page_dir, va);
+                if (paddr) {
+                    pmm_free_frame(paddr);
+                    vmm_unmap_page(va);
+                }
+            }
+            
+            kprintf("[BRK] Heap shrunk: 0x%08x-0x%08x\n", vma->start, vma->end);
+        }
+    }
+    
+    /* 更新brk */
     current_brk = addr;
     return current_brk;
 }

@@ -5,6 +5,7 @@
  */
 
 #include <kernel.h>
+#include <arch/i386/gdt.h>
 #include <string.h>
 
 /* TSS 结构 */
@@ -94,11 +95,12 @@ void tss_init(void)
     kprintf("[TSS] Initialized at 0x%08x\n", (uint32_t)&tss);
     kprintf("[TSS] Kernel stack: 0x%08x\n", tss.esp0);
     
-    /* 动态更新 GDT 中的 TSS 描述符 */
-    update_gdt_tss();
+    /* 使用新GDT模块更新 TSS 描述符 */
+    gdt_update_tss((uint32_t)&tss, sizeof(tss) - 1);
+    kprintf("[TSS] Updated GDT TSS descriptor with base 0x%08x\n", (uint32_t)&tss);
     
     /* 加载 TSS 到 TR 寄存器 */
-    asm volatile("ltr %%ax" : : "a"(0x28));  // 0x28 = GDT[5]
+    asm volatile("ltr %%ax" : : "a"(GDT_TSS));  // 0x28 = GDT[5]
     
     kprintf("[TSS] TSS loaded into TR register\n");
 }
@@ -125,5 +127,31 @@ uint32_t tss_get_size(void)
 void tss_set_kernel_stack(uint32_t stack)
 {
     tss.esp0 = stack;
+    
+    /* 调试：验证 TSS 内容 */
+    #ifdef DEBUG_TSS
+    extern void serial_putc(uint16_t port, char c);
+    serial_putc(0x3F8, 'T');
+    serial_putc(0x3F8, 'S');
+    serial_putc(0x3F8, 'S');
+    serial_putc(0x3F8, '\n');
+    #endif
+}
+
+/*
+ * 调试：验证 TSS 设置
+ */
+void tss_verify(void)
+{
+    extern void serial_putc(uint16_t port, char c);
+    kprintf("[TSS] Verification:\n");
+    kprintf("  ESP0 = 0x%08x\n", tss.esp0);
+    kprintf("  SS0  = 0x%04x\n", tss.ss0);
+    kprintf("  CS   = 0x%04x\n", tss.cs);
+    kprintf("  DS   = 0x%04x\n", tss.ds);
+    kprintf("  ES   = 0x%04x\n", tss.es);
+    kprintf("  FS   = 0x%04x\n", tss.fs);
+    kprintf("  GS   = 0x%04x\n", tss.gs);
+    kprintf("  SS   = 0x%04x\n", tss.ss);
 }
 

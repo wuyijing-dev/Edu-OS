@@ -30,4 +30,9 @@ ssize_t write(int fd, const void *buf, size_t count);
 int open(const char *path, int flags);
 int close(int fd);
 
+/* 内存映射 */
+typedef int off_t;
+void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
+int munmap(void *addr, size_t length);
+
 #endif /* _UNISTD_H */

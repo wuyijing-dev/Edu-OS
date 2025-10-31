@@ -8,6 +8,7 @@
 #include "string.h"
 #include "io.h"
 #include "types.h"
+#include <arch/i386/gdt.h>
 #include <arch/i386/idt.h>
 #include <arch/i386/irq.h>
 #include <drivers/timer.h>
@@ -25,6 +26,7 @@
 #include <fs/fat32.h>
 #include <drivers/block.h>
 #include <drivers/ramdisk.h>
+#include <drivers/bga.h>
 #include <syscall.h>
 #include <sync/mutex.h>
 #include <sync/semaphore.h>
@@ -954,6 +956,10 @@ void kernel_main(void)
     print_system_info();
     #endif
     
+    // 重新建立GDT（在内核虚拟地址空间）
+    // 必须在使用用户模式之前完成
+    gdt_init();
+    
     // 初始化中断系统（静默）
     idt_init();
     irq_init();
@@ -1538,6 +1544,7 @@ void kernel_main(void)
     kprintf("\n");
     #endif  // 旧测试套件结束
     
+    #if 0  // 禁用Test 1和Test 2，保留GUI测试
     /* ========== 新功能测试：调度器CR3切换 + mmap ========== */
     kprintf("\n");
     kprintf("╔════════════════════════════════════════════════════════════╗\n");
@@ -1743,6 +1750,85 @@ void kernel_main(void)
     kprintf("  ✅ File system (VFS + FAT32)\n");
     kprintf("  ✅ User-space libc (stdio, stdlib, string, unistd)\n");
     kprintf("\n");
+    #endif  // 禁用Test 1-4结束
+    
+    /* ========== BGA 图形驱动初始化 ========== */
+    kprintf("\n[Init] BGA Graphics Driver\n");
+    kprintf("================================================================================\n");
+    kprintf("\n");
+    
+    extern int bga_init(void);
+    extern int dev_fb_init(void);
+    
+    if (bga_init() == 0) {
+        /* 注册/dev/fb0设备 */
+        dev_fb_init();
+        
+        kprintf("      ✅ BGA initialized: 1024x768x32\n");
+        kprintf("      ✅ /dev/fb0 registered\n");
+        kprintf("\n");
+        
+        /* 加载GUI演示程序 */
+        kprintf("[Load] GUI Demo Program\n");
+        kprintf("================================================================================\n");
+        kprintf("\n");
+        
+        extern struct fat32_fs_info *fat32_get_fs(void);
+        struct fat32_fs_info *fs = fat32_get_fs();
+        
+        if (fs) {
+            /* 使用Linux风格的按需加载版本 */
+            extern pid_t create_user_process_lazy(const char *name, const char *elf_path);
+            
+            kprintf("      Loading /min.elf (Linux-style demand paging)...\n");
+            pid_t gui_pid = create_user_process_lazy("gui_demo", "/gui.elf");
+            
+            if (gui_pid > 0) {
+                kprintf("      ✅ GUI Demo loaded (PID %u)\n", gui_pid);
+                kprintf("      ✅ Fluent Design GUI will render on screen\n");
+                kprintf("\n");
+                kprintf("╔════════════════════════════════════════════════════════════╗\n");
+                kprintf("║           EduOS Desktop - Ready to Launch!               ║\n");
+                kprintf("╚════════════════════════════════════════════════════════════╝\n");
+                kprintf("\n");
+                
+                /* 启动调度器执行GUI程序 */
+                kprintf("[Scheduler] Starting multitasking...\n");
+                kprintf("      Enabling interrupts and scheduler...\n");
+                
+                extern void scheduler_enable(void);
+                extern void scheduler_schedule(void);
+                
+                scheduler_enable();
+                
+                kprintf("      ⚡ Performing first context switch...\n");
+                kprintf("      ℹ️  Interrupts will be enabled after switch\n");
+                kprintf("\n");
+                
+                /* 确保中断关闭，避免首次调度中被打断 */
+                asm volatile("cli");
+                
+                /* 主动进行第一次调度（不会返回） */
+                /* 注意：context_switch会在切换到用户态时启用中断（EFLAGS.IF=1） */
+                scheduler_schedule();
+                
+                /* 永远不应该到达这里 */
+                kprintf("      ❌ ERROR: Returned from scheduler!\n");
+                while (1) {
+                    asm volatile("hlt");
+                }
+            } else {
+                kprintf("      ❌ Failed to load min.elf (PID: %d)\n", gui_pid);
+                kprintf("      ℹ️  Make sure min.elf is in the FAT32 disk\n");
+            }
+        } else {
+            kprintf("      ⚠️  No FAT32 disk mounted\n");
+        }
+        
+        kprintf("\n");
+    } else {
+        kprintf("      ⚠️  BGA not available (fallback to VGA text mode)\n");
+    }
     
     #if 0  // 暂时禁用 MLFQ 测试
     /* ========== MLFQ 调度器测试（暂时禁用） ========== */

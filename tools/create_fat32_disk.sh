@@ -79,13 +79,15 @@ if [ ${#ELF_FILES[@]} -eq 0 ]; then
     echo "   ✓ hello.elf 编译成功"
 fi
 
-# 显示找到的 ELF 文件
+# 显示找到的 ELF 文件（含修改时间）
 echo "找到 ${#ELF_FILES[@]} 个 ELF 文件："
 echo ""
 for i in "${!ELF_FILES[@]}"; do
-    size=$(ls -lh "${ELF_FILES[$i]}" | awk '{print $5}')
-    entry=$(readelf -h "${ELF_FILES[$i]}" 2>/dev/null | grep "Entry point" | awk '{print $4}')
-    printf "  [%d] %-20s  (Size: %s, Entry: %s)\n" "$((i+1))" "${ELF_NAMES[$i]}" "$size" "$entry"
+    FILE="${ELF_FILES[$i]}"
+    size=$(ls -lh "$FILE" | awk '{print $5}')
+    entry=$(readelf -h "$FILE" 2>/dev/null | grep "Entry point" | awk '{print $4}')
+    mtime=$(stat -c '%y' "$FILE" 2>/dev/null | cut -d'.' -f1 | awk '{print $1, $2}')
+    printf "  [%d] %-20s  (Size: %s, Entry: %s, 修改: %s)\n" "$((i+1))" "${ELF_NAMES[$i]}" "$size" "$entry" "$mtime"
 done
 
 echo ""
@@ -182,10 +184,10 @@ sudo bash -c "echo 'FAT32 filesystem works!' > $MOUNT_POINT/readme.txt"
 sudo mkdir -p $MOUNT_POINT/testdir
 sudo bash -c "echo 'File in directory' > $MOUNT_POINT/testdir/file.txt"
 
-# 列出文件
+# 列出文件（显示修改时间）
 echo ""
-echo "磁盘内容："
-ls -lh $MOUNT_POINT/
+echo "磁盘内容（按修改时间排序）："
+ls -lht --time-style='+%Y-%m-%d %H:%M:%S' $MOUNT_POINT/
 
 # 6. 卸载磁盘
 echo ""
@@ -211,10 +213,15 @@ echo "    - test.txt"
 echo "    - readme.txt"
 echo "    - testdir/file.txt"
 echo ""
-echo "ELF 信息："
+echo "ELF 信息（含修改时间）："
 for i in "${!SELECTED_FILES[@]}"; do
-    echo "  ${SELECTED_NAMES[$i]}:"
-    readelf -h "${SELECTED_FILES[$i]}" 2>/dev/null | grep -E "Entry point address"
+    FILE="${SELECTED_FILES[$i]}"
+    NAME="${SELECTED_NAMES[$i]}"
+    MTIME=$(stat -c '%y' "$FILE" 2>/dev/null | cut -d'.' -f1)
+    ENTRY=$(readelf -h "$FILE" 2>/dev/null | grep -E "Entry point address" | awk '{print $NF}')
+    echo "  $NAME:"
+    echo "    修改时间: $MTIME"
+    echo "    入口地址: $ENTRY"
 done
 echo ""
 echo "提示: 运行 'make run' 将自动挂载此磁盘"

@@ -150,16 +150,18 @@ void mlfq_dequeue(struct process *proc)
  */
 struct process *mlfq_pick_next(void)
 {
-    /* 从最高优先级队列（Level 0）开始查找 */
+    /* Linux风格：从队列中peek而不是dequeue
+     * 原因：调度器会在context_switch后修改状态，不应该在pick时移除
+     */
     for (int level = 0; level < MLFQ_LEVELS; level++) {
         struct mlfq_queue *queue = &mlfq.levels[level];
         
         if (queue->count > 0 && queue->head) {
             struct process *next = queue->head;
             
-            /* 从队列中移除 */
-            mlfq_dequeue(next);
-            
+            /* Linux风格：仅返回进程，不从队列移除
+             * scheduler会在实际运行后调用mlfq_dequeue
+             */
             return next;
         }
     }

@@ -10,6 +10,7 @@
 #include <process/process.h>
 #include <mm/vma.h>
 #include <mm/vmm.h>
+#include <string.h>
 
 /* 异常名称表 */
 static const char *exception_messages[32] = {
@@ -123,6 +124,13 @@ static void handle_breakpoint(struct interrupt_frame *frame)
  */
 static void handle_general_protection(struct interrupt_frame *frame)
 {
+    /* 立即输出到串口 */
+    extern void serial_putc(uint16_t port, char c);
+    serial_putc(0x3F8, 'G');
+    serial_putc(0x3F8, 'P');
+    serial_putc(0x3F8, '!');
+    serial_putc(0x3F8, '\n');
+    
     kprintf("\n!!! EXCEPTION: General Protection Fault !!!\n");
     kprintf("Error Code: 0x%08x\n", frame->err_code);
     
@@ -141,12 +149,24 @@ static void handle_general_protection(struct interrupt_frame *frame)
 
 /*
  * 缺页异常处理器
+ * 返回值：0=成功处理（继续执行），-1=无法处理（终止进程）
  */
-static void handle_page_fault(struct interrupt_frame *frame)
+static int handle_page_fault(struct interrupt_frame *frame)
 {
     /* 读取CR2寄存器（引发缺页的地址） */
     uint32_t fault_addr;
     __asm__ volatile("mov %%cr2, %0" : "=r"(fault_addr));
+    
+    /* 串口调试：输出缺页地址的十六进制 */
+    extern void serial_putc(uint16_t port, char c);
+    serial_putc(0x3F8, 'P');
+    serial_putc(0x3F8, 'F');
+    serial_putc(0x3F8, ':');
+    for (int i = 28; i >= 0; i -= 4) {
+        int digit = (fault_addr >> i) & 0xF;
+        serial_putc(0x3F8, digit < 10 ? '0' + digit : 'a' + digit - 10);
+    }
+    serial_putc(0x3F8, '\n');
     
     /* 解析错误码 */
     bool present  = frame->err_code & 0x1;   // 页不存在
@@ -167,45 +187,192 @@ static void handle_page_fault(struct interrupt_frame *frame)
         /* 在完整实现中，这里可能是按需分配堆内存 */
     }
     
-    /* 打印详细信息 */
-    kprintf("\n!!! EXCEPTION: Page Fault !!!\n");
-    kprintf("Fault Address: 0x%08x\n", fault_addr);
-    kprintf("Error Code: 0x%08x\n", frame->err_code);
-    kprintf("  Cause: %s %s in %s mode%s%s\n",
-            write ? "Write" : ifetch ? "Instruction fetch" : "Read",
-            present ? "protection violation" : "non-present page",
-            user ? "user" : "kernel",
-            reserved ? ", reserved bit set" : "",
-            ifetch ? ", instruction fetch" : "");
+    /* 内核模式缺页：打印详细信息 */
+    if (!user) {
+        kprintf("\n!!! EXCEPTION: Page Fault !!!\n");
+        kprintf("Fault Address: 0x%08x\n", fault_addr);
+        kprintf("Error Code: 0x%08x\n", frame->err_code);
+        kprintf("  Cause: %s %s in %s mode%s%s\n",
+                write ? "Write" : ifetch ? "Instruction fetch" : "Read",
+                present ? "protection violation" : "non-present page",
+                user ? "user" : "kernel",
+                reserved ? ", reserved bit set" : "",
+                ifetch ? ", instruction fetch" : "");
+    }
     
     /* 如果在用户模式，可以尝试恢复；内核模式则必须panic */
     if (!user) {
         /* 内核空间缺页是严重错误 */
         panic("Kernel page fault");
+        return -1;  /* 不会执行到这里 */
     }
     
-    /* 用户空间缺页 - 检查是否可以按需分配 */
+    /* 用户空间缺页 - 检查是否可以按需分配或COW */
+    struct process *proc = NULL;
     if (fault_addr < 0xC0000000) {
-        struct process *proc = process_get_current();
+        proc = process_get_current();
         
-        if (proc && proc->vma_list) {
-            /* 查找对应的 VMA */
-            struct vma *vma = vma_find(proc->vma_list, fault_addr);
-            if (vma) {
-                /* 尝试按需分配 */
-                if (vma_handle_page_fault(vma, fault_addr, proc->page_dir) == 0) {
-                    kprintf("[PAGE FAULT] Handled via VMA: 0x%08x\n", fault_addr);
-                    return;  /* 缺页已处理，返回用户程序继续执行 */
+        /* 串口调试：进程信息 */
+        if (proc) {
+            serial_putc(0x3F8, 'P');
+            serial_putc(0x3F8, 'I');
+            serial_putc(0x3F8, 'D');
+            serial_putc(0x3F8, '=');
+            serial_putc(0x3F8, '0' + (proc->pid / 10));
+            serial_putc(0x3F8, '0' + (proc->pid % 10));
+            serial_putc(0x3F8, ' ');
+        }
+        
+        if (proc) {
+            /* 检查是否为COW（页存在但写保护） */
+            if (present && write) {
+                serial_putc(0x3F8, 'C');
+                serial_putc(0x3F8, 'O');
+                serial_putc(0x3F8, 'W');
+                serial_putc(0x3F8, '\n');
+                /* Copy-On-Write: 页存在且尝试写入只读页 */
+                uint32_t vaddr = fault_addr & ~0xFFF;
+                extern uint32_t vmm_virt_to_phys_in_directory(struct page_directory *pd, uint32_t virt);
+                uint32_t old_paddr = vmm_virt_to_phys_in_directory(proc->page_dir, vaddr);
+                
+                if (old_paddr) {
+                    extern uint32_t pmm_alloc_frame(void);
+                    uint32_t new_paddr = pmm_alloc_frame();
+                    
+                    if (new_paddr) {
+                        void *old_ptr, *new_ptr;
+                        
+                        if (old_paddr < 0x400000) {
+                            old_ptr = (void*)(old_paddr + 0xC0000000);
+                        } else {
+                            extern void vmm_map_page_in_directory(struct page_directory *pd,
+                                                                  uint32_t virt, uint32_t phys,
+                                                                  uint32_t flags);
+                            vmm_map_page_in_directory(proc->page_dir, 0xFFBFF000, old_paddr, 0x03);
+                            old_ptr = (void*)0xFFBFF000;
+                        }
+                        
+                        if (new_paddr < 0x400000) {
+                            new_ptr = (void*)(new_paddr + 0xC0000000);
+                        } else {
+                            extern void vmm_map_page_in_directory(struct page_directory *pd,
+                                                                  uint32_t virt, uint32_t phys,
+                                                                  uint32_t flags);
+                            vmm_map_page_in_directory(proc->page_dir, 0xFFBFE000, new_paddr, 0x03);
+                            new_ptr = (void*)0xFFBFE000;
+                        }
+                        
+                        memcpy(new_ptr, old_ptr, 4096);
+                        
+                        extern void vmm_map_page_in_directory(struct page_directory *pd,
+                                                              uint32_t virt, uint32_t phys,
+                                                              uint32_t flags);
+                        vmm_map_page_in_directory(proc->page_dir, vaddr, new_paddr,
+                                                  0x01 | 0x02 | 0x04);
+                        
+                        /* 刷新TLB */
+                        __asm__ volatile("invlpg (%0)" : : "r"(vaddr) : "memory");
+                        
+                        serial_putc(0x3F8, '[');
+                        serial_putc(0x3F8, 'C');
+                        serial_putc(0x3F8, 'O');
+                        serial_putc(0x3F8, 'W');
+                        serial_putc(0x3F8, '_');
+                        serial_putc(0x3F8, 'O');
+                        serial_putc(0x3F8, 'K');
+                        serial_putc(0x3F8, ']');
+                        
+                        /* 关键：验证调度器锁状态 */
+                        extern int scheduler_locked;
+                        serial_putc(0x3F8, ' ');
+                        serial_putc(0x3F8, 'L');
+                        serial_putc(0x3F8, 'O');
+                        serial_putc(0x3F8, 'C');
+                        serial_putc(0x3F8, 'K');
+                        serial_putc(0x3F8, '=');
+                        serial_putc(0x3F8, '0' + scheduler_locked);
+                        serial_putc(0x3F8, '\n');
+                        
+                        return 0;  /* COW成功处理 */
+                    }
                 }
+            }
+            
+            /* 检查VMA按需分配 */
+            if (proc->vma_list && !present) {
+                serial_putc(0x3F8, 'V');
+                serial_putc(0x3F8, 'M');
+                serial_putc(0x3F8, 'A');
+                serial_putc(0x3F8, '?');
+                
+                /* 查找对应的 VMA */
+                struct vma *vma = vma_find(proc->vma_list, fault_addr);
+                if (vma) {
+                    serial_putc(0x3F8, 'Y');
+                    serial_putc(0x3F8, '\n');
+                    
+                    /* 尝试按需分配 */
+                    if (vma_handle_page_fault(vma, fault_addr, proc->page_dir) == 0) {
+                        /* 缺页已处理，静默返回继续执行 */
+                        serial_putc(0x3F8, '\n');
+                        serial_putc(0x3F8, '[');
+                        serial_putc(0x3F8, 'O');
+                        serial_putc(0x3F8, 'K');
+                        serial_putc(0x3F8, ']');
+                        serial_putc(0x3F8, '\n');
+                        return 0;  /* 成功处理 */
+                    } else {
+                        serial_putc(0x3F8, 'F');
+                        serial_putc(0x3F8, 'A');
+                        serial_putc(0x3F8, 'I');
+                        serial_putc(0x3F8, 'L');
+                        serial_putc(0x3F8, '\n');
+                    }
+                } else {
+                    serial_putc(0x3F8, 'N');
+                    serial_putc(0x3F8, '\n');
+                }
+            } else if (!proc->vma_list) {
+                serial_putc(0x3F8, 'N');
+                serial_putc(0x3F8, 'O');
+                serial_putc(0x3F8, 'V');
+                serial_putc(0x3F8, 'M');
+                serial_putc(0x3F8, 'A');
+                serial_putc(0x3F8, '\n');
             }
         }
     }
     
-    /* 非法访问 - 终止进程 */
-    kprintf("[PAGE FAULT] Unhandled user space fault at 0x%08x\n", fault_addr);
-    kprintf("[PAGE FAULT] TODO: Terminate offending process\n");
-    /* TODO: 真正终止进程 */
-    while(1) { asm volatile("hlt"); }
+    /* 用户空间缺页无法处理 - Linux风格错误处理 */
+    serial_putc(0x3F8, '\n');
+    serial_putc(0x3F8, 'U');
+    serial_putc(0x3F8, 'N');
+    serial_putc(0x3F8, 'H');
+    serial_putc(0x3F8, 'A');
+    serial_putc(0x3F8, 'N');
+    serial_putc(0x3F8, 'D');
+    serial_putc(0x3F8, 'L');
+    serial_putc(0x3F8, 'E');
+    serial_putc(0x3F8, 'D');
+    serial_putc(0x3F8, '\n');
+    
+    kprintf("\n[PAGE FAULT] Unhandled user space fault\n");
+    kprintf("  Address: 0x%08x\n", fault_addr);
+    kprintf("  Process: %s (PID %u)\n", proc ? proc->name : "unknown", proc ? proc->pid : 0);
+    kprintf("  Cause: %s %s\n",
+            write ? "Write" : ifetch ? "Instruction fetch" : "Read",
+            present ? "protection violation" : "non-present page");
+    
+    if (proc) {
+        kprintf("  Terminating process...\n");
+        proc->state = PROCESS_STATE_TERMINATED;
+        proc->exit_code = -11;  /* SIGSEGV */
+        
+        extern void scheduler_schedule(void);
+        scheduler_schedule();
+    }
+    
+    return -1;  /* 无法处理 */
 }
 
 /*
@@ -227,6 +394,13 @@ static void handle_invalid_opcode(struct interrupt_frame *frame)
  */
 static void handle_double_fault(struct interrupt_frame *frame)
 {
+    /* 立即输出到串口，避免kprintf可能失败 */
+    extern void serial_putc(uint16_t port, char c);
+    serial_putc(0x3F8, 'D');
+    serial_putc(0x3F8, 'F');
+    serial_putc(0x3F8, '!');
+    serial_putc(0x3F8, '\n');
+    
     kprintf("\n!!! CRITICAL: Double Fault !!!\n");
     kprintf("Error Code: 0x%08x\n", frame->err_code);
     kprintf("This usually indicates a serious kernel bug!\n");
@@ -240,6 +414,37 @@ static void handle_double_fault(struct interrupt_frame *frame)
 void exception_handler(struct interrupt_frame *frame)
 {
     uint32_t int_no = frame->int_no;
+    
+    /* Linux风格：异常处理期间禁止调度（关键！）
+     * 原因：Page Fault处理可能需要访问内存，如果在此期间发生调度
+     * 可能导致CR3切换，破坏异常处理的上下文
+     */
+    extern void scheduler_disable(void);
+    extern void scheduler_enable_noschedule(void);
+    scheduler_disable();
+    
+    /* Page Fault特殊快速路径：不打印任何东西，直接处理 */
+    if (int_no == EXCEPTION_PF) {
+        int pf_result = handle_page_fault(frame);
+        
+        /* Linux关键修复：在异常返回前必须解锁调度器！ */
+        scheduler_enable_noschedule();
+        
+        if (pf_result == 0) {
+            /* 成功处理，直接返回到用户态继续执行 */
+            extern void serial_putc(uint16_t port, char c);
+            serial_putc(0x3F8, '[');
+            serial_putc(0x3F8, 'P');
+            serial_putc(0x3F8, 'F');
+            serial_putc(0x3F8, '_');
+            serial_putc(0x3F8, 'R');
+            serial_putc(0x3F8, 'E');
+            serial_putc(0x3F8, 'T');
+            serial_putc(0x3F8, ']');
+            serial_putc(0x3F8, '\n');
+            return;
+        }
+    }
     
     /* 设置红色文本表示错误 */
     vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
@@ -273,6 +478,7 @@ void exception_handler(struct interrupt_frame *frame)
             handle_general_protection(frame);
             break;
         case EXCEPTION_PF:
+            /* Page Fault已在快速路径处理，这里是失败情况 */
             handle_page_fault(frame);
             break;
         default:

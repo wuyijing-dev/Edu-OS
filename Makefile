@@ -33,6 +33,7 @@ BOOT_STAGE1_ASM := $(BOOT_DIR)/stage1/boot_stage1.asm
 BOOT_STAGE2_ASM := $(BOOT_DIR)/stage2/loader_complete.asm
 KERNEL_ENTRY_ASM := $(KERNEL_DIR)/arch/i386/entry.asm
 INTERRUPTS_ASM := $(KERNEL_DIR)/arch/i386/interrupts.asm
+GDT_FLUSH_ASM := $(KERNEL_DIR)/arch/i386/gdt_flush.asm
 CONTEXT_SWITCH_ASM := $(KERNEL_DIR)/process/context_switch.asm
 SYSCALL_ENTRY_ASM := $(KERNEL_DIR)/syscall/syscall_entry.asm
 
@@ -42,6 +43,7 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/vga.c \
 	$(KERNEL_DIR)/serial.c \
 	$(KERNEL_DIR)/kernel.c \
+	$(KERNEL_DIR)/arch/i386/gdt.c \
 	$(KERNEL_DIR)/arch/i386/idt.c \
 	$(KERNEL_DIR)/arch/i386/pic.c \
 	$(KERNEL_DIR)/arch/i386/irq.c \
@@ -53,6 +55,7 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/drivers/block.c \
 	$(KERNEL_DIR)/drivers/ide.c \
 	$(KERNEL_DIR)/drivers/ramdisk.c \
+	$(KERNEL_DIR)/drivers/bga.c \
 	$(KERNEL_DIR)/mm/pmm.c \
 	$(KERNEL_DIR)/mm/vmm.c \
 	$(KERNEL_DIR)/mm/kmalloc.c \
@@ -70,6 +73,7 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/fs/dev_null.c \
 	$(KERNEL_DIR)/fs/dev_zero.c \
 	$(KERNEL_DIR)/fs/dev_console.c \
+	$(KERNEL_DIR)/fs/dev_fb.c \
 	$(KERNEL_DIR)/fs/procfs.c \
 	$(KERNEL_DIR)/fs/proc_cpuinfo.c \
 	$(KERNEL_DIR)/fs/proc_meminfo.c \
@@ -102,11 +106,12 @@ BOOT_STAGE1_BIN := $(BUILD_DIR)/boot_stage1.bin
 BOOT_STAGE2_BIN := $(BUILD_DIR)/boot_stage2.bin
 KERNEL_ENTRY_O := $(BUILD_DIR)/entry.o
 INTERRUPTS_O := $(BUILD_DIR)/interrupts.o
+GDT_FLUSH_O := $(BUILD_DIR)/gdt_flush.o
 CONTEXT_SWITCH_O := $(BUILD_DIR)/context_switch.o
 SYSCALL_ENTRY_O := $(BUILD_DIR)/syscall_entry.o
 KERNEL_C_O := $(patsubst %.c,$(BUILD_DIR)/%.o,$(notdir $(KERNEL_C_FILES)))
 
-ALL_KERNEL_O := $(KERNEL_ENTRY_O) $(INTERRUPTS_O) $(CONTEXT_SWITCH_O) $(SYSCALL_ENTRY_O) $(KERNEL_C_O)
+ALL_KERNEL_O := $(KERNEL_ENTRY_O) $(INTERRUPTS_O) $(GDT_FLUSH_O) $(CONTEXT_SWITCH_O) $(SYSCALL_ENTRY_O) $(KERNEL_C_O)
 
 KERNEL_ELF := $(BUILD_DIR)/kernel.elf
 KERNEL_BIN := $(BUILD_DIR)/kernel.bin
@@ -171,6 +176,10 @@ $(INTERRUPTS_O): $(INTERRUPTS_ASM) | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译中断处理程序 (interrupts.asm)...$(NC)"
 	$(AS) $(ASFLAGS_ELF) $< -o $@
 
+$(GDT_FLUSH_O): $(GDT_FLUSH_ASM) | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译GDT刷新 (gdt_flush.asm)...$(NC)"
+	$(AS) $(ASFLAGS_ELF) $< -o $@
+
 $(CONTEXT_SWITCH_O): $(CONTEXT_SWITCH_ASM) | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译上下文切换 (context_switch.asm)...$(NC)"
 	$(AS) $(ASFLAGS_ELF) $< -o $@
@@ -207,6 +216,10 @@ $(BUILD_DIR)/libgcc_compat.o: $(LIB_DIR)/libgcc_compat.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # 第3章新增的中断系统文件
+$(BUILD_DIR)/gdt.o: $(KERNEL_DIR)/arch/i386/gdt.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $<$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(BUILD_DIR)/idt.o: $(KERNEL_DIR)/arch/i386/idt.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $<$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -249,6 +262,10 @@ $(BUILD_DIR)/ide.o: $(KERNEL_DIR)/drivers/ide.c | $(BUILD_DIR)
 
 $(BUILD_DIR)/ramdisk.o: $(KERNEL_DIR)/drivers/ramdisk.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (RAM Disk)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/bga.o: $(KERNEL_DIR)/drivers/bga.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (BGA Graphics)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # 第4章新增的内存管理文件
@@ -320,6 +337,10 @@ $(BUILD_DIR)/dev_zero.o: $(KERNEL_DIR)/fs/dev_zero.c | $(BUILD_DIR)
 
 $(BUILD_DIR)/dev_console.o: $(KERNEL_DIR)/fs/dev_console.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (/dev/console)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/dev_fb.o: $(KERNEL_DIR)/fs/dev_fb.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (/dev/fb0)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # 第9章新增的ProcFS文件
@@ -497,9 +518,11 @@ run: $(OS_IMG)
 		echo -e "$(CYAN)挂载 FAT32 测试磁盘为 Primary Slave (hdb)$(NC)"; \
 		$(QEMU) -hda $(OS_IMG) \
 			-hdb $(BUILD_DIR)/fat32_test.img \
+			-vga std \
 			-serial stdio -m 128M; \
 	else \
 		$(QEMU) -hda $(OS_IMG) \
+			-vga std \
 			-serial stdio -m 128M; \
 	fi
 

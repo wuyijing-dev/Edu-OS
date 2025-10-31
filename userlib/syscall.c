@@ -15,6 +15,8 @@
 #define SYS_execve   11
 #define SYS_getpid   20
 #define SYS_getppid  64
+#define SYS_mmap     90
+#define SYS_munmap   91
 
 /* 系统调用宏 */
 #define SYSCALL0(name, num) \
@@ -129,4 +131,28 @@ int open(const char *path, int flags)
 int close(int fd)
 {
     return _close_impl(fd);
+}
+
+/* mmap系统调用（6个参数） */
+void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
+{
+    int ret;
+    asm volatile(
+        "push %%ebp\n\t"       /* 保存ebp */
+        "mov %6, %%ebp\n\t"    /* 第6个参数 offset */
+        "int $0x80\n\t"
+        "pop %%ebp\n\t"        /* 恢复ebp */
+        : "=a"(ret)
+        : "a"(SYS_mmap), "b"(addr), "c"(length), "d"(prot), "S"(flags), "m"(fd)
+        : "memory"
+    );
+    return (void*)ret;
+}
+
+/* munmap系统调用（2个参数） */
+int munmap(void *addr, size_t length)
+{
+    int ret;
+    asm volatile("int $0x80" : "=a"(ret) : "a"(SYS_munmap), "b"(addr), "c"(length));
+    return ret;
 }

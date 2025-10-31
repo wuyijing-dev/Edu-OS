@@ -53,6 +53,8 @@ struct cpu_context {
     uint32_t eip;       /* 指令指针 */
     uint32_t cs;        /* 代码段 */
     uint32_t eflags;    /* 标志寄存器 */
+    uint32_t user_esp;  /* 用户态栈指针（切换特权级时使用） */
+    uint32_t ss;        /* 栈段选择器（切换特权级时使用） */
 } __attribute__((packed));
 
 /* 进程控制块（PCB） */

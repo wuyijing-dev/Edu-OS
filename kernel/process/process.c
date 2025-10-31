@@ -14,7 +14,7 @@ static uint32_t next_pid = 1;
 static uint32_t process_count = 0;
 
 /* 所有进程链表（双向链表）*/
-static struct process *process_list_head = NULL;
+struct process *process_list_head = NULL;  /* 导出给其他模块使用 */
 static struct process *process_list_tail = NULL;
 
 /* 当前运行进程 */
@@ -216,6 +216,8 @@ struct process *process_create_kernel_thread(
     proc->context.eip = (uint32_t)kernel_thread_entry;
     proc->context.eflags = 0x202;  /* IF=1（允许中断） */
     proc->context.cs = 0x08;       /* 内核代码段 */
+    proc->context.ss = 0x10;       /* 内核数据段 */
+    proc->context.user_esp = 0;    /* 内核线程不需要用户栈 */
     
     /* 将实际的入口函数地址存储在ebx中 */
     proc->context.ebx = (uint32_t)entry;

@@ -36,22 +36,54 @@ int sys_getppid(void)
 }
 
 /*
- * sys_exit - 退出当前进程
+ * sys_exit - 退出当前进程（Linux风格完整实现）
  */
 int sys_exit(int status)
 {
-    kprintf("\n[SYSCALL] User program exited with status %d\n", status);
-    kprintf("[SYSCALL] Returning to kernel...\n");
+    struct process *current = process_get_current();
     
-    /* 简化：直接停止（真正的实现会切换到其他进程） */
-    kprintf("\n[SUCCESS] User mode program executed successfully!\n");
-    kprintf("[INFO] In a full implementation, would return to scheduler\n");
-    
-    /* 停止系统（演示用） */
-    while (1) {
-        asm("hlt");
+    if (!current) {
+        panic("sys_exit: no current process");
     }
     
+    current->exit_code = status;
+    current->state = PROCESS_STATE_TERMINATED;
+    
+    /* 释放用户空间资源 */
+    if (current->vma_list) {
+        extern void vma_destroy_all(struct vma *list);
+        vma_destroy_all(current->vma_list);
+        current->vma_list = NULL;
+    }
+    
+    /* 释放页表 */
+    if (current->page_dir) {
+        extern void vmm_destroy_page_directory(struct page_directory *pd);
+        vmm_destroy_page_directory(current->page_dir);
+        current->page_dir = NULL;
+    }
+    
+    /* 唤醒等待的父进程 */
+    if (current->parent && current->parent->state == PROCESS_STATE_BLOCKED) {
+        current->parent->state = PROCESS_STATE_READY;
+    }
+    
+    /* 将子进程重新父亲化给init进程 */
+    extern struct process *process_list_head;
+    struct process *child = process_list_head;
+    while (child) {
+        if (child->parent == current) {
+            child->parent = NULL;
+        }
+        child = child->next;
+    }
+    
+    /* 切换到其他进程 */
+    extern void scheduler_schedule(void);
+    scheduler_schedule();
+    
+    /* 不会返回 */
+    panic("sys_exit: returned from scheduler");
     return 0;
 }
 

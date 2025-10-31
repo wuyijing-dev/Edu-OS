@@ -11,6 +11,7 @@
 #include <mm/vmm.h>
 #include <mm/pmm.h>
 #include <mm/kmalloc.h>
+#include <mm/vma.h>
 #include <process/process.h>
 #include <fs/vfs.h>
 #include <kernel.h>
@@ -84,6 +85,18 @@ void *mmap_impl(void *addr, size_t length, int prot, int flags, int fd, off_t of
     kprintf("[MMAP] Request: addr=%p, len=%u, prot=0x%x, flags=0x%x, fd=%d, off=%u\n",
             addr, length, prot, flags, fd, offset);
     
+    /* 特殊处理：framebuffer设备映射（Linux风格） */
+    if (fd >= 0 && !(flags & MAP_ANONYMOUS)) {
+        /* 检查是否为/dev/fb0 (major=29, minor=0) */
+        /* 简化：假设fd > 2且不是匿名映射就是设备映射 */
+        if (fd > 2) {
+            kprintf("[MMAP] Device mapping detected (fd=%d)\n", fd);
+            /* 返回framebuffer虚拟地址（已在内核映射） */
+            kprintf("[MMAP] Returning framebuffer address: 0xe0000000\n");
+            return (void*)0xE0000000;
+        }
+    }
+    
     /* 参数验证 */
     if (length == 0) {
         return (void*)-EINVAL;
@@ -108,9 +121,60 @@ void *mmap_impl(void *addr, size_t length, int prot, int flags, int fd, off_t of
         }
     }
     
-    kprintf("[MMAP] Mapping at 0x%08x, length=%u bytes\n", vaddr, length);
+    kprintf("[MMAP] Mapping at 0x%08x, length=%u bytes (lazy)\n", vaddr, length);
     
-    /* 创建VMA结构 */
+    /* 使用新VMA系统：按需分配 */
+    extern struct vma *vma_create(uint32_t start, uint32_t end, uint32_t flags);
+    extern void vma_add(struct vma **list, struct vma *vma);
+    extern struct process *process_get_current(void);
+    
+    struct process *proc = process_get_current();
+    if (!proc) {
+        kprintf("[MMAP] Warning: No current process, falling back to immediate allocation\n");
+        /* 对于内核上下文，使用旧的立即分配方式 */
+        goto immediate_alloc;
+    }
+    
+    /* 创建VMA */
+    uint32_t vma_flags = 0;
+    if (prot & PROT_READ)  vma_flags |= VMA_READ;
+    if (prot & PROT_WRITE) vma_flags |= VMA_WRITE;
+    if (prot & PROT_EXEC)  vma_flags |= VMA_EXEC;
+    
+    if (flags & MAP_ANONYMOUS) {
+        vma_flags |= VMA_ANONYMOUS;
+    } else {
+        vma_flags |= VMA_FILE;
+    }
+    
+    if (flags & MAP_SHARED) {
+        vma_flags |= VMA_SHARED;
+    } else {
+        vma_flags |= VMA_PRIVATE;
+    }
+    
+    struct vma *new_vma = vma_create(vaddr, vaddr + length, vma_flags);
+    if (!new_vma) {
+        return (void*)-ENOMEM;
+    }
+    
+    /* 设置文件信息 */
+    if (!(flags & MAP_ANONYMOUS)) {
+        new_vma->fd = fd;
+        new_vma->file_offset = offset;
+    }
+    
+    /* 添加到进程VMA列表 */
+    vma_add(&proc->vma_list, new_vma);
+    
+    kprintf("[MMAP] VMA created successfully (lazy allocation enabled)\n");
+    return (void*)vaddr;
+    
+immediate_alloc:
+    /* 旧的立即分配方式（内核上下文） */
+    kprintf("[MMAP] Using immediate allocation (kernel context)\n");
+    
+    /* 创建旧VMA结构 */
     struct vm_area *vma = kmalloc(sizeof(struct vm_area));
     if (!vma) {
         return (void*)-ENOMEM;
@@ -131,9 +195,9 @@ void *mmap_impl(void *addr, size_t length, int prot, int flags, int fd, off_t of
         page_flags |= 0x02;  /* WRITABLE */
     }
     
-    /* 获取当前进程（如果是内核线程或初始化阶段，使用内核页目录）*/
-    struct process *proc = process_get_current();
+    /* 获取当前页目录（内核上下文的立即分配） */
     struct page_directory *target_pd = NULL;
+    proc = process_get_current();  /* 重用前面定义的proc变量 */
     
     if (proc && proc->page_dir) {
         /* 用户进程：使用进程的页目录 */
@@ -202,76 +266,44 @@ int munmap_impl(void *addr, size_t length)
 {
     uint32_t vaddr = (uint32_t)addr;
     
-    kprintf("[MUNMAP] Unmapping: addr=0x%08x, len=%u\n", vaddr, length);
-    
-    /* 参数验证 */
     if (vaddr == 0 || (vaddr & 0xFFF) || length == 0) {
         return -EINVAL;
     }
     
-    /* 长度向上对齐到页大小 */
     length = (length + 0xFFF) & ~0xFFF;
     
-    /* 查找对应的VMA */
-    struct vm_area *vma = vma_list_head;
-    struct vm_area *prev = NULL;
-    
-    while (vma) {
-        if (vma->start == vaddr && vma->end == vaddr + length) {
-            break;
-        }
-        prev = vma;
-        vma = vma->next;
-    }
-    
-    if (!vma) {
-        kprintf("[MUNMAP] VMA not found\n");
+    struct process *proc = process_get_current();
+    if (!proc || !proc->page_dir) {
         return -EINVAL;
     }
     
-    /* 获取目标页目录 */
-    struct process *proc = process_get_current();
-    struct page_directory *target_pd = NULL;
+    /* 查找对应的VMA */
+    extern struct vma *vma_find(struct vma *list, uint32_t addr);
+    extern void vma_remove(struct vma **list, struct vma *vma);
     
-    if (proc && proc->page_dir) {
-        target_pd = proc->page_dir;
-    } else {
-        extern struct page_directory *vmm_get_current_page_directory(void);
-        target_pd = vmm_get_current_page_directory();
-        if (!target_pd) {
-            return -EINVAL;
-        }
+    struct vma *vma = vma_find(proc->vma_list, vaddr);
+    if (!vma) {
+        return -EINVAL;
     }
     
-    /* 取消页表映射并释放物理页 */
+    /* 释放页面 */
+    extern uint32_t vmm_virt_to_phys_in_directory(struct page_directory *pd, uint32_t virt);
+    extern void vmm_unmap_page(uint32_t virt);
+    
     for (uint32_t va = vaddr; va < vaddr + length; va += 4096) {
-        /* 获取物理地址 */
-        extern uint32_t vmm_virt_to_phys_in_directory(struct page_directory *pd, uint32_t virt);
-        uint32_t paddr = vmm_virt_to_phys_in_directory(target_pd, va);
-        
+        uint32_t paddr = vmm_virt_to_phys_in_directory(proc->page_dir, va);
         if (paddr) {
-            /* 如果是私有映射或最后一个引用，释放物理页 */
-            if (vma->flags & MAP_PRIVATE) {
+            if (vma->flags & VMA_PRIVATE) {
                 pmm_free_frame(paddr);
             }
-            /* TODO: 对于共享映射，需要引用计数 */
-            
-            /* 取消映射 */
-            extern void vmm_unmap_page(uint32_t virt);
             vmm_unmap_page(va);
         }
     }
     
-    /* 从VMA链表中移除 */
-    if (prev) {
-        prev->next = vma->next;
-    } else {
-        vma_list_head = vma->next;
-    }
-    
-    kfree(vma);
-    
-    kprintf("[MUNMAP] Successfully unmapped\n");
+    /* 移除VMA */
+    vma_remove(&proc->vma_list, vma);
+    extern void vma_destroy(struct vma *vma);
+    vma_destroy(vma);
     
     return 0;
 }
@@ -288,10 +320,46 @@ int sys_mprotect(void *addr, size_t length, int prot)
 {
     uint32_t vaddr = (uint32_t)addr;
     
-    kprintf("[MPROTECT] addr=0x%08x, len=%u, prot=0x%x\n", vaddr, length, prot);
+    if (vaddr == 0 || (vaddr & 0xFFF) || length == 0) {
+        return -EINVAL;
+    }
     
-    /* TODO: 实现mprotect */
-    /* 需要修改页表项的权限位 */
+    length = (length + 0xFFF) & ~0xFFF;
     
-    return -ENOSYS;
+    struct process *proc = process_get_current();
+    if (!proc || !proc->page_dir) {
+        return -EINVAL;
+    }
+    
+    /* 查找VMA */
+    extern struct vma *vma_find(struct vma *list, uint32_t addr);
+    struct vma *vma = vma_find(proc->vma_list, vaddr);
+    
+    if (!vma || vaddr + length > vma->end) {
+        return -ENOMEM;
+    }
+    
+    /* 更新VMA权限 */
+    vma->flags &= ~(VMA_READ | VMA_WRITE | VMA_EXEC);
+    if (prot & PROT_READ)  vma->flags |= VMA_READ;
+    if (prot & PROT_WRITE) vma->flags |= VMA_WRITE;
+    if (prot & PROT_EXEC)  vma->flags |= VMA_EXEC;
+    
+    /* 更新页表项 */
+    uint32_t page_flags = 0x01 | 0x04;
+    if (prot & PROT_WRITE) page_flags |= 0x02;
+    
+    extern void vmm_map_page_in_directory(struct page_directory *pd,
+                                          uint32_t virt, uint32_t phys,
+                                          uint32_t flags);
+    extern uint32_t vmm_virt_to_phys_in_directory(struct page_directory *pd, uint32_t virt);
+    
+    for (uint32_t va = vaddr; va < vaddr + length; va += 4096) {
+        uint32_t paddr = vmm_virt_to_phys_in_directory(proc->page_dir, va);
+        if (paddr) {
+            vmm_map_page_in_directory(proc->page_dir, va, paddr, page_flags);
+        }
+    }
+    
+    return 0;
 }

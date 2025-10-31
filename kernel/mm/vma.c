@@ -8,6 +8,7 @@
 #include <mm/vmm.h>
 #include <kernel.h>
 #include <string.h>
+#include <serial.h>
 
 /*
  * 创建新的 VMA
@@ -23,6 +24,7 @@ struct vma *vma_create(uint32_t start, uint32_t end, uint32_t flags)
     vma->end = (end + 0xFFF) & ~0xFFF;
     vma->flags = flags;
     vma->file_offset = 0;
+    vma->fd = -1;
     vma->private_data = NULL;
     vma->next = NULL;
     
@@ -108,9 +110,10 @@ void vma_destroy_all(struct vma *list)
 }
 
 /*
- * 处理 VMA 缺页
+ * 处理 VMA 缺页（Linux风格实现）
  * 
  * 当访问一个 VMA 区域但页不存在时调用
+ * 支持：文件映射、匿名映射、零页、COW私有映射
  */
 int vma_handle_page_fault(struct vma *vma, uint32_t fault_addr, 
                           struct page_directory *pd)
@@ -121,6 +124,9 @@ int vma_handle_page_fault(struct vma *vma, uint32_t fault_addr,
     
     uint32_t vaddr = fault_addr & ~0xFFF;
     
+    /* 调试：输出单个字符避免触发新缺页 */
+    serial_write('V');
+    
     /* 检查地址是否在 VMA 范围内 */
     if (vaddr < vma->start || vaddr >= vma->end) {
         return -1;
@@ -129,31 +135,97 @@ int vma_handle_page_fault(struct vma *vma, uint32_t fault_addr,
     /* 分配物理页 */
     uint32_t paddr = pmm_alloc_frame();
     if (!paddr) {
-        kprintf("[VMA] Out of memory for page fault at 0x%08x\n", vaddr);
+        serial_write('!');
         return -1;
     }
+    serial_write('A');
     
-    /* 如果是零页（BSS），清零 */
-    if (vma->flags & VMA_ZERO) {
-        if (paddr < 0x400000) {
-            memset((void*)(paddr + 0xC0000000), 0, 4096);
+    /* 初始化页面内容（根据VMA类型）*/
+    void *page_ptr = NULL;
+    if (paddr < 0x400000) {
+        page_ptr = (void*)(paddr + 0xC0000000);
+    } else {
+        /* TODO: 高端内存需要临时映射 */
+        kprintf("[VMA] Warning: High memory 0x%08x, skipping initialization\n", paddr);
+    }
+    
+    if (page_ptr) {
+        /* Linux风格：先清零整页 */
+        memset(page_ptr, 0, 4096);
+        
+        /* 根据VMA类型填充内容 */
+        if (vma->flags & VMA_FILE) {
+            serial_write('F');
+            /* 文件映射：从文件读取数据 */
+            if (vma->fd >= 0) {
+                extern int vfs_lseek(int fd, int offset, int whence);
+                extern int vfs_read(int fd, char *buf, int count);
+                
+                /* Linux风格：计算文件偏移
+                 * file_offset = vma->file_offset + (fault_addr - vma->start)
+                 */
+                uint32_t offset_in_vma = vaddr - vma->start;
+                uint32_t file_offset = vma->file_offset + offset_in_vma;
+                
+                serial_write('S');
+                /* 定位到文件位置 */
+                int seek_result = vfs_lseek(vma->fd, file_offset, 0);
+                if (seek_result >= 0) {
+                    serial_write('R');
+                    /* 读取一整页（4KB）
+                     * 如果文件不足4KB，VFS会返回实际读取的字节数
+                     * 剩余部分保持为零（前面已经memset了）
+                     */
+                    int bytes_read = vfs_read(vma->fd, (char*)page_ptr, 4096);
+                    
+                    if (bytes_read < 0) {
+                        serial_write('E');
+                    } else {
+                        serial_write('K');
+                    }
+                } else {
+                    serial_write('X');
+                }
+            }
+        }
+        /* VMA_ZERO 和 VMA_ANONYMOUS 已经通过 memset 处理了 */
+    }
+    
+    /* 计算页表标志（Linux风格）*/
+    uint32_t page_flags = 0x01 | 0x04;  /* PRESENT | USER */
+    
+    /* 写权限 */
+    if (vma->flags & VMA_WRITE) {
+        /* 如果是私有映射，先设为只读（COW）*/
+        if (vma->flags & VMA_PRIVATE) {
+            /* COW: 首次映射为只读，写入时触发缺页复制 */
+            page_flags &= ~0x02;
+        } else {
+            page_flags |= 0x02;  /* WRITABLE */
         }
     }
     
-    /* 计算页标志 */
-    uint32_t page_flags = 0x01 | 0x04;  /* PRESENT | USER */
-    if (vma->flags & VMA_WRITE) {
-        page_flags |= 0x02;  /* WRITABLE */
-    }
+    /* 执行权限（x86不支持NX位，除非启用PAE）*/
+    /* 在标准32位模式下，所有页面都可执行 */
     
     /* 建立映射 */
+    serial_write('M');
     extern void vmm_map_page_in_directory(struct page_directory *pd,
                                           uint32_t virt, uint32_t phys,
                                           uint32_t flags);
     vmm_map_page_in_directory(pd, vaddr, paddr, page_flags);
     
-    kprintf("[VMA] Page fault handled: vaddr=0x%08x -> paddr=0x%08x (flags=0x%x)\n",
-            vaddr, paddr, vma->flags);
+    /* 刷新TLB（关键！）*/
+    __asm__ volatile("invlpg (%0)" : : "r"(vaddr) : "memory");
+    
+    serial_write('D');
+    
+    /* 调试输出（可选）*/
+    #if 0
+    kprintf("[VMA] Page fault handled: vaddr=0x%08x -> paddr=0x%08x "
+            "(flags=0x%02x, vma_flags=0x%02x)\n",
+            vaddr, paddr, page_flags, vma->flags);
+    #endif
     
     return 0;
 }

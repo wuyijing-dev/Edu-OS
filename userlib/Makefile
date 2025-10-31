@@ -6,7 +6,9 @@ CFLAGS = -m32 -ffreestanding -nostdlib -nostdinc -fno-builtin -fno-stack-protect
 ARFLAGS = rcs
 
 # 源文件
-SRCS = string.c stdio.c stdlib.c syscall.c
+SRCS = string.c stdio.c stdlib.c syscall.c \
+       gui/gui_core.c gui/gui_draw.c gui/gui_font.c \
+       gui/gui_widget.c gui/gui_button.c
 OBJS = $(SRCS:.c=.o)
 
 # 目标库

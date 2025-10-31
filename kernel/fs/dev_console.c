@@ -39,9 +39,21 @@ static int dev_console_write(struct vfs_file *file, const char *buf, size_t coun
         return 0;
     }
     
-    /* 输出到VGA控制台 */
+    /* Linux风格：从用户空间复制数据到内核空间
+     * 关键修复：buf是用户空间地址，需要通过用户页表访问
+     * 
+     * 方法1（临时）：通过Page Fault让内核映射用户页
+     * 方法2（正确）：切换CR3到用户页表，读取数据，切回内核CR3
+     */
+    
+    /* 简化实现：直接访问（依赖内核态仍有用户CR3）*/
+    /* Linux风格：我们在异常/系统调用时不切换CR3，所以可以直接访问 */
     for (size_t i = 0; i < count; i++) {
-        vga_putc(buf[i]);
+        /* 串口和VGA双输出 */
+        extern void serial_putc(uint16_t port, char c);
+        char ch = buf[i];
+        vga_putc(ch);
+        serial_putc(0x3F8, ch);  /* 同时输出到串口 */
     }
     
     return count;

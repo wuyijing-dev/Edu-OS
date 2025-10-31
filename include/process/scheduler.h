@@ -12,6 +12,8 @@
 /* 调度器初始化 */
 void scheduler_init(void);
 void scheduler_enable(void);
+void scheduler_enable_noschedule(void);
+void scheduler_disable(void);
 
 /* 进程队列操作 */
 void scheduler_add_process(struct process *proc);
