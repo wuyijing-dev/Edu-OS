@@ -157,22 +157,22 @@ struct process *mlfq_pick_next(void)
     for (int level = 0; level < MLFQ_LEVELS; level++) {
         struct mlfq_queue *queue = &mlfq.levels[level];
         
-        kprintf("[MLFQ_DEBUG] Level %d: count=%d, head=%p\n", level, queue->count, queue->head);
+        // kprintf("[MLFQ_DEBUG] Level %d: count=%d, head=%p\n", level, queue->count, queue->head);
         
         if (queue->count > 0 && queue->head) {
             /* 遍历队列，跳过TERMINATED状态的进程 */
             struct process *proc = queue->head;
             while (proc) {
                 total_checked++;
-                kprintf("[MLFQ_DEBUG] Checking PID %u (%s): state=%d, next=%p\n",
-                        proc->pid, proc->name, proc->state, proc->next);
+                // kprintf("[MLFQ_DEBUG] Checking PID %u (%s): state=%d, next=%p\n",
+                //         proc->pid, proc->name, proc->state, proc->next);
                 
                 if (proc->state == PROCESS_STATE_READY || 
                     proc->state == PROCESS_STATE_RUNNING) {
                     /* Linux风格：仅返回进程，不从队列移除
                      * scheduler会在实际运行后调用mlfq_dequeue
                      */
-                    kprintf("[MLFQ_DEBUG] Picked PID %u\n", proc->pid);
+                    // kprintf("[MLFQ_DEBUG] Picked PID %u\n", proc->pid);
                     return proc;
                 }
                 proc = proc->next;
@@ -181,7 +181,7 @@ struct process *mlfq_pick_next(void)
     }
     
     /* 所有队列都空或只有TERMINATED进程 */
-    kprintf("[MLFQ_DEBUG] No READY process (checked %d total)\n", total_checked);
+    // kprintf("[MLFQ_DEBUG] No READY process (checked %d total)\n", total_checked);
     return NULL;
 }
 

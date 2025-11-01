@@ -29,8 +29,26 @@ int sys_read(int fd, char *buf, size_t count)
     }
     #endif
     
-    /* 调用 VFS */
-    return vfs_read(fd, buf, count);
+    /* Linux风格：通过进程fd_table读取 */
+    extern struct process *process_get_current(void);
+    struct process *proc = process_get_current();
+    
+    if (!proc || !proc->fd_table) {
+        return -EBADF;
+    }
+    
+    if (fd < 0 || fd >= MAX_FILES_PER_PROCESS) {
+        return -EBADF;
+    }
+    
+    struct vfs_file *file = proc->fd_table->files[fd];
+    if (!file) {
+        return -EBADF;
+    }
+    
+    /* 使用vfs_file_read */
+    extern ssize_t vfs_file_read(struct vfs_file *file, void *buf, size_t count);
+    return vfs_file_read(file, buf, count);
 }
 
 /*
@@ -108,12 +126,40 @@ int sys_open(const char *path, int flags, int mode)
         return -ENAMETOOLONG;
     }
     
-    /* 调用 VFS */
-    return vfs_open(path, flags, mode);
+    /* Linux风格：通过进程fd_table打开文件
+     * 1. 使用vfs_open_file获取vfs_file指针
+     * 2. 在进程fd_table中分配fd
+     * 3. 返回进程的fd
+     */
+    extern struct process *process_get_current(void);
+    struct process *proc = process_get_current();
+    
+    if (!proc || !proc->fd_table) {
+        return -EBADF;
+    }
+    
+    /* 打开文件并获取vfs_file指针 */
+    extern struct vfs_file *vfs_open_file(const char *path, int flags, int mode);
+    struct vfs_file *file = vfs_open_file(path, flags, mode);
+    if (!file) {
+        return -ENOENT;
+    }
+    
+    /* 在进程fd_table中分配fd */
+    extern int fd_table_alloc(struct file_descriptor_table *table, struct vfs_file *file);
+    int fd = fd_table_alloc(proc->fd_table, file);
+    if (fd < 0) {
+        /* 分配失败，释放file */
+        extern void file_put(struct vfs_file *file);
+        file_put(file);
+        return -ENOMEM;  /* Too many open files */
+    }
+    
+    return fd;
 }
 
 /*
- * sys_close - 关闭文件描述符
+ * sys_close - 关闭文件描述符（Linux风格：使用进程fd_table）
  */
 int sys_close(int fd)
 {
@@ -121,7 +167,16 @@ int sys_close(int fd)
         return -EINVAL;
     }
     
-    return vfs_close(fd);
+    extern struct process *process_get_current(void);
+    struct process *proc = process_get_current();
+    
+    if (!proc || !proc->fd_table) {
+        return -EBADF;
+    }
+    
+    /* 从进程fd_table中释放fd */
+    extern int fd_table_free(struct file_descriptor_table *table, int fd);
+    return fd_table_free(proc->fd_table, fd);
 }
 
 /*

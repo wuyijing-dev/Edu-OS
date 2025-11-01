@@ -153,6 +153,14 @@ static void handle_general_protection(struct interrupt_frame *frame)
  */
 static int handle_page_fault(struct interrupt_frame *frame)
 {
+    static uint32_t pf_handler_count = 0;
+    pf_handler_count++;
+    
+    /* 每10次打印一次 */
+    if (pf_handler_count % 10 == 0) {
+        kprintf("[PF_HANDLER] Entered %u times\n", pf_handler_count);
+    }
+    
     /* 读取CR2寄存器（引发缺页的地址） */
     uint32_t fault_addr;
     __asm__ volatile("mov %%cr2, %0" : "=r"(fault_addr));

@@ -111,12 +111,13 @@ struct vfs_superblock {
     void *private_data;
 };
 
-/* Inode */
+/* Inode (Linux风格：添加引用计数) */
 struct vfs_inode {
     uint32_t ino;
     uint32_t mode;
     uint32_t size;
     uint32_t rdev;  /* 设备号 */
+    uint32_t ref_count;     /* Linux风格：引用计数 */
     struct vfs_superblock *sb;
     struct vfs_inode_operations *i_op;
     struct vfs_file_operations *f_op;
@@ -132,13 +133,14 @@ struct vfs_dentry {
     struct vfs_dentry *sibling;
 };
 
-/* File */
+/* File (Linux风格：添加引用计数) */
 struct vfs_file {
     struct vfs_dentry *dentry;
     struct vfs_inode *inode;
     struct vfs_file_operations *f_op;
     uint32_t flags;
     uint32_t pos;
+    uint32_t ref_count;     /* Linux风格：引用计数 */
     void *private_data;
 };
 
@@ -168,6 +170,18 @@ void vfs_free_inode(struct vfs_inode *inode);
 struct vfs_dentry *vfs_alloc_dentry(const char *name, struct vfs_inode *inode);
 void vfs_free_dentry(struct vfs_dentry *dentry);
 int vfs_add_child_dentry(struct vfs_dentry *parent, struct vfs_dentry *child);
+
+/* Linux风格：引用计数管理 */
+struct vfs_inode *inode_get(struct vfs_inode *inode);   /* 增加inode引用 */
+void inode_put(struct vfs_inode *inode);                /* 减少inode引用 */
+struct vfs_file *file_get(struct vfs_file *file);       /* 增加file引用 */
+void file_put(struct vfs_file *file);                   /* 减少file引用 */
+
+/* Linux风格：进程独立的文件操作 */
+struct vfs_file *vfs_open_file(const char *path, int flags, int mode);
+ssize_t vfs_file_read(struct vfs_file *file, void *buf, size_t count);
+ssize_t vfs_file_write(struct vfs_file *file, const void *buf, size_t count);
+struct vfs_file *vfs_state_get_file(int fd);
 
 #endif // VFS_H
 

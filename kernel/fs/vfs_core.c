@@ -20,7 +20,7 @@ static struct {
 /* ========== 工具函数 ========== */
 
 /*
- * 分配inode
+ * 分配inode（Linux风格：初始化引用计数）
  */
 struct vfs_inode *vfs_alloc_inode(struct vfs_superblock *sb, uint32_t ino)
 {
@@ -32,6 +32,7 @@ struct vfs_inode *vfs_alloc_inode(struct vfs_superblock *sb, uint32_t ino)
     memset(inode, 0, sizeof(struct vfs_inode));
     inode->ino = ino;
     inode->sb = sb;
+    inode->ref_count = 0;  /* Linux风格：初始引用计数为0，使用时通过inode_get增加 */
     
     return inode;
 }
@@ -75,6 +76,92 @@ void vfs_free_dentry(struct vfs_dentry *dentry)
 {
     if (dentry) {
         kfree(dentry);
+    }
+}
+
+/* ========== Linux风格：引用计数管理 ========== */
+
+/*
+ * inode_get - 增加inode引用计数
+ * 
+ * Linux风格：当多个file或dentry共享同一个inode时使用
+ */
+struct vfs_inode *inode_get(struct vfs_inode *inode)
+{
+    if (inode) {
+        inode->ref_count++;
+    }
+    return inode;
+}
+
+/*
+ * inode_put - 减少inode引用计数，为0时释放
+ * 
+ * Linux风格：配对inode_get使用
+ */
+void inode_put(struct vfs_inode *inode)
+{
+    if (!inode) {
+        return;
+    }
+    
+    if (inode->ref_count > 0) {
+        inode->ref_count--;
+    }
+    
+    /* Linux风格：引用计数为0时释放inode */
+    if (inode->ref_count == 0) {
+        vfs_free_inode(inode);
+    }
+}
+
+/*
+ * file_get - 增加file引用计数
+ * 
+ * Linux风格：用于dup/fork等场景
+ */
+struct vfs_file *file_get(struct vfs_file *file)
+{
+    if (file) {
+        file->ref_count++;
+        /* 注意：不增加inode引用计数！
+         * 原因：file和inode是1:1关系，只有在alloc/free file时才操作inode引用
+         * 否则会导致inode引用计数不匹配
+         */
+    }
+    return file;
+}
+
+/*
+ * file_put - 减少file引用计数，为0时释放
+ * 
+ * Linux风格：配对file_get使用
+ */
+void file_put(struct vfs_file *file)
+{
+    if (!file) {
+        return;
+    }
+    
+    if (file->ref_count > 0) {
+        file->ref_count--;
+    }
+    
+    /* Linux风格：引用计数为0时释放file */
+    if (file->ref_count == 0) {
+        /* 调用文件系统的release */
+        if (file->f_op && file->f_op->release) {
+            file->f_op->release(file);
+        }
+        
+        /* 释放底层inode的引用 */
+        if (file->inode) {
+            inode_put(file->inode);
+        }
+        
+        /* 释放file结构本身 */
+        extern void free_file(struct vfs_file *file);
+        free_file(file);
     }
 }
 
@@ -258,9 +345,9 @@ static struct vfs_file *alloc_file(void)
 }
 
 /*
- * 释放file对象
+ * 释放file对象（移除static，供file_put使用）
  */
-static void free_file(struct vfs_file *file)
+void free_file(struct vfs_file *file)
 {
     if (file) {
         kfree(file);
@@ -341,7 +428,13 @@ int vfs_open(const char *path, int flags, int mode)
     file->f_op = dentry->inode->f_op;
     file->flags = flags;
     file->pos = 0;
+    file->ref_count = 1;  /* Linux风格：初始引用计数为1 */
     file->private_data = dentry->inode->private_data;  // ← 传递 FAT32 目录项！
+    
+    /* Linux风格：增加inode引用计数 */
+    if (file->inode) {
+        inode_get(file->inode);
+    }
     
     /* 调用文件系统的open */
     if (file->f_op && file->f_op->open) {
@@ -368,7 +461,7 @@ int vfs_open(const char *path, int flags, int mode)
 }
 
 /*
- * close系统调用
+ * close系统调用（Linux风格：使用引用计数）
  */
 int vfs_close(int fd)
 {
@@ -381,14 +474,11 @@ int vfs_close(int fd)
         return -EBADF;
     }
     
-    /* 调用文件系统的release */
-    if (file->f_op && file->f_op->release) {
-        file->f_op->release(file);
-    }
-    
-    /* 释放file对象 */
-    free_file(file);
+    /* 从fd表中移除 */
     vfs_state.open_files[fd] = NULL;
+    
+    /* Linux风格：减少引用计数，为0时自动调用release并释放 */
+    file_put(file);
     
     return 0;
 }
@@ -438,9 +528,14 @@ struct vfs_file *vfs_state_get_file(int fd)
 /*
  * vfs_open_file - 直接打开文件并返回vfs_file指针（用于进程fd_table）
  */
+/*
+ * vfs_open_file - 打开文件并返回vfs_file指针（Linux风格：使用引用计数）
+ * 
+ * 用于进程独立的文件描述符表
+ */
 struct vfs_file *vfs_open_file(const char *path, int flags, int mode)
 {
-    /* 使用全局vfs_open打开文件，然后复制文件结构 */
+    /* 使用全局vfs_open打开文件 */
     int global_fd = vfs_open(path, flags, mode);
     if (global_fd < 0) {
         return NULL;
@@ -453,24 +548,16 @@ struct vfs_file *vfs_open_file(const char *path, int flags, int mode)
         return NULL;
     }
     
-    /* 分配新的文件结构（每个进程独立） */
-    struct vfs_file *file = kmalloc(sizeof(struct vfs_file));
-    if (!file) {
-        vfs_close(global_fd);
-        return NULL;
-    }
-    
-    /* 复制文件结构 */
-    memcpy(file, global_file, sizeof(struct vfs_file));
-    
-    /* 重要：不要关闭全局fd！
-     * 因为我们复制的vfs_file中的inode指针指向全局文件的inode
-     * 如果关闭全局fd，inode可能被释放，导致后续读取失败
-     * 
-     * TODO: 实现inode引用计数机制
-     * 目前的workaround：保持全局fd打开，让VFS管理其生命周期
+    /* Linux风格：增加引用计数并复制指针
+     * 不需要分配新的file结构，直接共享底层file对象
+     * file_get会增加file和inode的引用计数
      */
-    /* vfs_close(global_fd); - 不要关闭！ */
+    struct vfs_file *file = file_get(global_file);
+    
+    /* Linux风格：关闭全局fd，但不会真正释放file（引用计数>0）
+     * 这样全局VFS表不会泄漏，且file对象通过引用计数管理生命周期
+     */
+    vfs_close(global_fd);
     
     return file;
 }

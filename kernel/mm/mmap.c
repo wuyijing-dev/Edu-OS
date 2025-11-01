@@ -86,15 +86,44 @@ void *mmap_impl(void *addr, size_t length, int prot, int flags, int fd, off_t of
             addr, length, prot, flags, fd, offset);
     
     /* 特殊处理：设备映射（如framebuffer）
-     * Linux风格：设备映射需要特殊处理
+     * Linux风格：通过检查文件inode来判断是否为设备映射
      * - 不从文件读取数据
      * - 直接映射设备物理内存
-     * - 暂时简化：通过标志位识别
      */
-    bool is_device_mapping = (fd >= 4);  /* fd >= 4 可能是设备文件 */
+    bool is_device_mapping = false;
+    
+    if (!(flags & MAP_ANONYMOUS) && fd >= 0) {
+        /* 通过进程fd_table获取文件 */
+        extern struct process *process_get_current(void);
+        struct process *proc = process_get_current();
+        
+        kprintf("[MMAP_DEBUG] flags=0x%x, fd=%d, proc=%p\n", flags, fd, proc);
+        
+        if (proc && proc->fd_table && fd < MAX_FILES_PER_PROCESS) {
+            struct vfs_file *file = proc->fd_table->files[fd];
+            kprintf("[MMAP_DEBUG] fd_table=%p, file=%p\n", proc->fd_table, file);
+            
+            if (file && file->inode) {
+                kprintf("[MMAP_DEBUG] inode=%p, rdev=0x%x\n", file->inode, file->inode->rdev);
+                
+                /* 检查是否为framebuffer设备（通过rdev判断）
+                 * Linux风格：使用MAJOR宏提取major号（已通过vfs.h包含）
+                 * framebuffer设备major=29
+                 */
+                uint32_t major = MAJOR(file->inode->rdev);
+                kprintf("[MMAP_DEBUG] major=%d (checking if == 29)\n", major);
+                
+                if (major == 29) {
+                    is_device_mapping = true;
+                    kprintf("[MMAP] Framebuffer device detected (fd=%d, rdev=0x%x, major=%d)\n", 
+                            fd, file->inode->rdev, major);
+                }
+            }
+        }
+    }
     
     if (is_device_mapping) {
-        kprintf("[MMAP] Device mapping detected (fd=%d), will use lazy device VMA\n", fd);
+        kprintf("[MMAP] Device mapping detected, will use lazy device VMA\n");
         /* 不直接返回内核地址，而是创建用户空间VMA
          * VMA的Page Fault处理器会映射设备内存
          */

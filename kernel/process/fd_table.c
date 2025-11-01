@@ -26,7 +26,7 @@ struct file_descriptor_table *fd_table_create(void)
 }
 
 /*
- * 销毁文件描述符表
+ * 销毁文件描述符表（Linux风格：使用引用计数）
  */
 void fd_table_destroy(struct file_descriptor_table *table)
 {
@@ -34,10 +34,11 @@ void fd_table_destroy(struct file_descriptor_table *table)
         return;
     }
     
-    /* 关闭所有打开的文件 */
+    /* Linux风格：关闭所有打开的文件，减少引用计数 */
+    extern void file_put(struct vfs_file *file);
     for (int i = 0; i < MAX_FILES_PER_PROCESS; i++) {
         if (table->files[i]) {
-            /* TODO: 调用vfs_close释放文件 */
+            file_put(table->files[i]);
             table->files[i] = NULL;
         }
     }
@@ -67,7 +68,7 @@ int fd_table_alloc(struct file_descriptor_table *table, struct vfs_file *file)
 }
 
 /*
- * 释放文件描述符
+ * 释放文件描述符（Linux风格：使用引用计数）
  */
 int fd_table_free(struct file_descriptor_table *table, int fd)
 {
@@ -76,6 +77,10 @@ int fd_table_free(struct file_descriptor_table *table, int fd)
     }
     
     if (table->files[fd]) {
+        /* Linux风格：减少file引用计数 */
+        extern void file_put(struct vfs_file *file);
+        file_put(table->files[fd]);
+        
         table->files[fd] = NULL;
         table->count--;
         return 0;

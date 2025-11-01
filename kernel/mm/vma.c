@@ -120,6 +120,14 @@ void vma_destroy_all(struct vma *list)
 int vma_handle_page_fault(struct vma *vma, uint32_t fault_addr, 
                           struct page_directory *pd)
 {
+    static uint32_t pf_count = 0;
+    pf_count++;
+    
+    /* 每10次Page Fault打印一次统计 */
+    if (pf_count % 10 == 0) {
+        kprintf("[VMA_PF] Handled %u page faults\n", pf_count);
+    }
+    
     if (!vma || !pd) {
         return -1;
     }
@@ -178,8 +186,9 @@ int vma_handle_page_fault(struct vma *vma, uint32_t fault_addr,
                         uint32_t offset_in_vma = vaddr - vma->start;
                         uint32_t file_offset = vma->file_offset + offset_in_vma;
                         
-                        /* 关闭中断，避免在VFS操作中被打断 */
-                        asm volatile("cli");
+                        /* 注意：在Page Fault处理期间，中断已经被CPU自动禁用
+                         * 不需要再次cli，且不应该cli，因为可能导致中断永久禁用
+                         */
                         
                         serial_write('S');
                         
