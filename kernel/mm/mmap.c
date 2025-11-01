@@ -85,16 +85,19 @@ void *mmap_impl(void *addr, size_t length, int prot, int flags, int fd, off_t of
     kprintf("[MMAP] Request: addr=%p, len=%u, prot=0x%x, flags=0x%x, fd=%d, off=%u\n",
             addr, length, prot, flags, fd, offset);
     
-    /* 特殊处理：framebuffer设备映射（Linux风格） */
-    if (fd >= 0 && !(flags & MAP_ANONYMOUS)) {
-        /* 检查是否为/dev/fb0 (major=29, minor=0) */
-        /* 简化：假设fd > 2且不是匿名映射就是设备映射 */
-        if (fd > 2) {
-            kprintf("[MMAP] Device mapping detected (fd=%d)\n", fd);
-            /* 返回framebuffer虚拟地址（已在内核映射） */
-            kprintf("[MMAP] Returning framebuffer address: 0xe0000000\n");
-            return (void*)0xE0000000;
-        }
+    /* 特殊处理：设备映射（如framebuffer）
+     * Linux风格：设备映射需要特殊处理
+     * - 不从文件读取数据
+     * - 直接映射设备物理内存
+     * - 暂时简化：通过标志位识别
+     */
+    bool is_device_mapping = (fd >= 4);  /* fd >= 4 可能是设备文件 */
+    
+    if (is_device_mapping) {
+        kprintf("[MMAP] Device mapping detected (fd=%d), will use lazy device VMA\n", fd);
+        /* 不直接返回内核地址，而是创建用户空间VMA
+         * VMA的Page Fault处理器会映射设备内存
+         */
     }
     
     /* 参数验证 */
@@ -143,6 +146,10 @@ void *mmap_impl(void *addr, size_t length, int prot, int flags, int fd, off_t of
     
     if (flags & MAP_ANONYMOUS) {
         vma_flags |= VMA_ANONYMOUS;
+    } else if (is_device_mapping) {
+        /* 设备映射：标记为匿名+设备，不从文件读取 */
+        vma_flags |= VMA_ANONYMOUS;  
+        kprintf("[MMAP] Device VMA will map physical memory directly\n");
     } else {
         vma_flags |= VMA_FILE;
     }
@@ -158,10 +165,17 @@ void *mmap_impl(void *addr, size_t length, int prot, int flags, int fd, off_t of
         return (void*)-ENOMEM;
     }
     
-    /* 设置文件信息 */
+    /* 设置文件/设备信息 */
     if (!(flags & MAP_ANONYMOUS)) {
         new_vma->fd = fd;
         new_vma->file_offset = offset;
+        if (is_device_mapping) {
+            /* 对于设备映射，private_data存储设备信息 */
+            /* 这里可以存储BGA的物理地址 */
+            extern uint32_t bga_get_framebuffer_physical(void);
+            new_vma->private_data = (void*)bga_get_framebuffer_physical();
+            kprintf("[MMAP] Device VMA: phys=%p\n", new_vma->private_data);
+        }
     }
     
     /* 添加到进程VMA列表 */

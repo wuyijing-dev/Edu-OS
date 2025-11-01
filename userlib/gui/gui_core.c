@@ -33,17 +33,24 @@ struct Window {
  */
 GuiContext *gui_init(void)
 {
+    printf("[gui_init] Starting GUI initialization...\n");
+    
     GuiContext *ctx = malloc(sizeof(GuiContext));
     if (!ctx) {
+        printf("[gui_init] ERROR: malloc failed\n");
         return NULL;
     }
+    printf("[gui_init] malloc succeeded: ctx=%p\n", ctx);
     
     /* 打开framebuffer设备 */
-    ctx->fb_fd = open("/dev/fb0", 0);
+    printf("[gui_init] Opening /fb0...\n");
+    ctx->fb_fd = open("/fb0", 0);  /* DevFS注册在根目录，不是/dev下 */
     if (ctx->fb_fd < 0) {
+        printf("[gui_init] ERROR: Failed to open /dev/fb0 (fd=%d)\n", ctx->fb_fd);
         free(ctx);
         return NULL;
     }
+    printf("[gui_init] /dev/fb0 opened: fd=%d\n", ctx->fb_fd);
     
     /* 获取屏幕信息（暂时硬编码，完整版应该用ioctl） */
     ctx->width = 1024;
@@ -52,15 +59,23 @@ GuiContext *gui_init(void)
     
     /* Linux方式：通过mmap映射framebuffer */
     size_t fb_size = ctx->width * ctx->height * (ctx->bpp / 8);
+    printf("[gui_init] Framebuffer size: %u bytes (%dx%dx%d)\n", 
+           fb_size, ctx->width, ctx->height, ctx->bpp);
     
     /* PROT_READ | PROT_WRITE (0x3), MAP_SHARED (0x01) */
+    printf("[gui_init] Calling mmap for framebuffer...\n");
     ctx->framebuffer = mmap(NULL, fb_size, 0x3, 0x01, ctx->fb_fd, 0);
     
+    printf("[gui_init] mmap returned: %p\n", ctx->framebuffer);
+    
     if (ctx->framebuffer == (void*)-1 || ctx->framebuffer == NULL) {
+        printf("[gui_init] ERROR: mmap failed\n");
         close(ctx->fb_fd);
         free(ctx);
         return NULL;
     }
+    
+    printf("[gui_init] ✓ GUI initialized successfully!\n");
     
     ctx->windows = NULL;
     ctx->default_font = NULL;

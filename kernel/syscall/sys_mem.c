@@ -127,10 +127,56 @@ extern int munmap_impl(void *addr, size_t length);
 
 /*
  * sys_mmap - 内存映射
+ * 
+ * 我们的实现：用户态通过结构体传参（ebx指向结构体）
+ * 因为x86系统调用最多5个寄存器参数，mmap需要6个
  */
 void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
 {
-    return mmap_impl(addr, length, prot, flags, fd, offset);
+    /* Linux风格：实现copy_from_user来安全读取用户空间数据 */
+    uint32_t args_ptr = (uint32_t)addr;
+    
+    kprintf("[SYS_MMAP] Called with addr=0x%08x\n", args_ptr);
+    
+    extern struct process *process_get_current(void);
+    struct process *proc = process_get_current();
+    
+    kprintf("[SYS_MMAP] Current process: %s (PID %u)\n", 
+            proc ? proc->name : "NULL", proc ? proc->pid : 0);
+    kprintf("[SYS_MMAP] page_dir: 0x%08x\n", proc && proc->page_dir ? proc->page_dir->physical_addr : 0);
+    
+    /* 本地数组，从用户空间复制 */
+    unsigned long args_copy[6];
+    
+    /* 通过物理地址访问用户空间数组 */
+    if (proc && proc->page_dir && args_ptr >= 0x08000000 && args_ptr < 0xC0000000) {
+        extern uint32_t vmm_virt_to_phys_in_directory(struct page_directory *pd, uint32_t virt);
+        uint32_t args_phys = vmm_virt_to_phys_in_directory(proc->page_dir, args_ptr);
+        
+        kprintf("[SYS_MMAP] Args phys: 0x%08x\n", args_phys);
+        
+        if (args_phys && args_phys < 0x400000) {
+            /* 通过直接映射访问物理内存 */
+            unsigned long *phys_ptr = (unsigned long*)(args_phys + 0xC0000000);
+            for (int i = 0; i < 6; i++) {
+                args_copy[i] = phys_ptr[i];
+            }
+            
+            kprintf("[SYS_MMAP] Decoded: addr=%p, len=%u, prot=0x%x, flags=0x%x, fd=%d, off=%u\n",
+                    (void*)args_copy[0], args_copy[1], args_copy[2], args_copy[3], 
+                    (int)args_copy[4], args_copy[5]);
+            
+            return mmap_impl((void*)args_copy[0], args_copy[1], args_copy[2], 
+                            args_copy[3], (int)args_copy[4], args_copy[5]);
+        } else {
+            kprintf("[SYS_MMAP] ERROR: Cannot access args at 0x%08x (phys=0x%08x)\n", 
+                    args_ptr, args_phys);
+            return (void*)-EFAULT;
+        }
+    }
+    
+    kprintf("[SYS_MMAP] ERROR: Invalid context or address\n");
+    return (void*)-EINVAL;
 }
 
 /*

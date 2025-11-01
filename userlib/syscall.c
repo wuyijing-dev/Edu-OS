@@ -133,17 +133,26 @@ int close(int fd)
     return _close_impl(fd);
 }
 
-/* mmap系统调用（6个参数） */
+/* mmap系统调用（6个参数）
+ * Linux old_mmap风格：ebx指向栈上的参数数组
+ */
 void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
 {
+    /* 在栈上构建参数数组 */
+    unsigned long args[6] = {
+        (unsigned long)addr,
+        (unsigned long)length,
+        (unsigned long)prot,
+        (unsigned long)flags,
+        (unsigned long)fd,
+        (unsigned long)offset
+    };
+    
     int ret;
     asm volatile(
-        "push %%ebp\n\t"       /* 保存ebp */
-        "mov %6, %%ebp\n\t"    /* 第6个参数 offset */
-        "int $0x80\n\t"
-        "pop %%ebp\n\t"        /* 恢复ebp */
+        "int $0x80"
         : "=a"(ret)
-        : "a"(SYS_mmap), "b"(addr), "c"(length), "d"(prot), "S"(flags), "m"(fd)
+        : "a"(SYS_mmap), "b"(args)
         : "memory"
     );
     return (void*)ret;

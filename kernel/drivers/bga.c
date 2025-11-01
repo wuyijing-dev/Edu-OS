@@ -274,6 +274,14 @@ uint32_t *bga_get_framebuffer(void)
 }
 
 /*
+ * 获取framebuffer物理地址（用于mmap）
+ */
+uint32_t bga_get_framebuffer_physical(void)
+{
+    return g_mode_info.fb_physical;
+}
+
+/*
  * 画单个像素
  */
 void bga_put_pixel(uint32_t x, uint32_t y, uint32_t color)

@@ -161,21 +161,17 @@ int vma_handle_page_fault(struct vma *vma, uint32_t fault_addr,
                 extern int vfs_lseek(int fd, int offset, int whence);
                 extern int vfs_read(int fd, char *buf, int count);
                 
-                /* Linux风格：计算文件偏移
-                 * file_offset = vma->file_offset + (fault_addr - vma->start)
-                 */
+                /* 计算文件偏移 */
                 uint32_t offset_in_vma = vaddr - vma->start;
                 uint32_t file_offset = vma->file_offset + offset_in_vma;
                 
+                /* 关闭中断，避免在VFS操作中被打断 */
+                asm volatile("cli");
+                
                 serial_write('S');
-                /* 定位到文件位置 */
                 int seek_result = vfs_lseek(vma->fd, file_offset, 0);
                 if (seek_result >= 0) {
                     serial_write('R');
-                    /* 读取一整页（4KB）
-                     * 如果文件不足4KB，VFS会返回实际读取的字节数
-                     * 剩余部分保持为零（前面已经memset了）
-                     */
                     int bytes_read = vfs_read(vma->fd, (char*)page_ptr, 4096);
                     
                     if (bytes_read < 0) {
@@ -186,7 +182,25 @@ int vma_handle_page_fault(struct vma *vma, uint32_t fault_addr,
                 } else {
                     serial_write('X');
                 }
+                
+                /* 恢复中断（会在iret时自动恢复） */
             }
+        } else if (vma->private_data) {
+            /* 设备映射：直接使用物理地址（如BGA framebuffer）
+             * private_data存储设备的物理基地址
+             */
+            serial_write('D');
+            serial_write('E');
+            serial_write('V');
+            
+            /* 计算本页对应的设备物理地址 */
+            uint32_t offset_in_vma = vaddr - vma->start;
+            uint32_t device_phys = (uint32_t)vma->private_data + offset_in_vma;
+            
+            /* 使用设备物理地址替代paddr */
+            pmm_free_frame(paddr);  /* 释放刚分配的物理页 */
+            paddr = device_phys;     /* 使用设备物理地址 */
+            page_ptr = NULL;         /* 设备内存不需要初始化 */
         }
         /* VMA_ZERO 和 VMA_ANONYMOUS 已经通过 memset 处理了 */
     }
