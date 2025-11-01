@@ -17,6 +17,9 @@ extern int sys_getpid(void);
 extern int sys_getppid(void);
 extern int sys_waitpid(pid_t pid, int *status, int options);
 
+/* 时间 */
+extern int sys_time(uint32_t *tloc);
+
 /* 文件I/O */
 extern int sys_read(int fd, char *buf, size_t count);
 extern int sys_write(int fd, const char *buf, size_t count);
@@ -57,6 +60,7 @@ syscall_func_t syscall_table[MAX_SYSCALLS] = {
     [SYS_unlink]    = (syscall_func_t)sys_unlink,     /* 10 */
     [SYS_execve]    = (syscall_func_t)sys_execve,     /* 11 */
     [SYS_chdir]     = (syscall_func_t)sys_chdir,      /* 12 */
+    [SYS_time]      = (syscall_func_t)sys_time,       /* 13 */
     [SYS_lseek]     = (syscall_func_t)sys_lseek,      /* 19 */
     [SYS_getpid]    = (syscall_func_t)sys_getpid,     /* 20 */
     [SYS_mkdir]     = (syscall_func_t)sys_mkdir,      /* 39 */

@@ -13,6 +13,7 @@
 #define SYS_close    6
 #define SYS_waitpid  7
 #define SYS_execve   11
+#define SYS_time     13
 #define SYS_getpid   20
 #define SYS_getppid  64
 #define SYS_mmap     90
@@ -163,5 +164,13 @@ int munmap(void *addr, size_t length)
 {
     int ret;
     asm volatile("int $0x80" : "=a"(ret) : "a"(SYS_munmap), "b"(addr), "c"(length));
+    return ret;
+}
+
+/* time系统调用（1个参数） */
+int _time_syscall(unsigned int *tloc)
+{
+    int ret;
+    asm volatile("int $0x80" : "=a"(ret) : "a"(SYS_time), "b"(tloc));
     return ret;
 }

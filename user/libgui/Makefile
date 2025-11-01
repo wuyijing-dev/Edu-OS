@@ -9,7 +9,9 @@ CFLAGS := -m32 -ffreestanding -nostdlib -nostdinc -fno-builtin \
 
 BUILD_DIR := ../build/libgui
 
-SOURCES := gui_core.c gui_draw.c gui_font.c gui_widget.c gui_button.c
+SOURCES := gui_core.c gui_draw.c gui_font.c gui_widget.c \
+           gui_button.c gui_textbox.c gui_checkbox.c \
+           gui_slider.c gui_menu.c
 
 OBJECTS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(SOURCES))
 

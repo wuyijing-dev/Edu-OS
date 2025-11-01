@@ -6,6 +6,7 @@
 #include <fs/devfs.h>
 #include <kernel.h>
 #include <vga.h>
+#include <drivers/keyboard.h>
 
 /* /dev/console的文件操作 */
 
@@ -25,10 +26,36 @@ static int dev_console_release(struct vfs_file *file)
 static int dev_console_read(struct vfs_file *file, char *buf, size_t count)
 {
     (void)file;
-    (void)buf;
-    (void)count;
-    /* TODO: 实现从键盘读取 */
-    return 0;
+    
+    if (!buf || count == 0) {
+        return 0;
+    }
+    
+    /* 从键盘缓冲区读取字符 */
+    size_t i = 0;
+    while (i < count) {
+        /* 检查是否有按键可读（非阻塞检查）*/
+        if (!keyboard_haskey()) {
+            /* 如果已经读取了一些字符，返回已读取的数量 */
+            if (i > 0) {
+                break;
+            }
+            /* 否则阻塞等待第一个字符 */
+            buf[i] = keyboard_getchar();
+            i++;
+        } else {
+            /* 有按键可读，直接读取 */
+            buf[i] = keyboard_getchar();
+            i++;
+            
+            /* 如果读到换行符，停止读取（行缓冲模式）*/
+            if (buf[i-1] == '\n') {
+                break;
+            }
+        }
+    }
+    
+    return i;
 }
 
 static int dev_console_write(struct vfs_file *file, const char *buf, size_t count)

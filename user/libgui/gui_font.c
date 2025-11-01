@@ -50,8 +50,8 @@ static void draw_char_simple(GuiContext *ctx, int x, int y, char c, Color color)
     for (int row = 0; row < VGA_FONT_HEIGHT; row++) {
         uint8_t line = bitmap[row];
         for (int col = 0; col < VGA_FONT_WIDTH; col++) {
-            /* 测试位：从高位到低位（bit 7到bit 0）*/
-            if (line & (1 << (7 - col))) {
+            /* 测试位：从低位到高位（修复镜像问题）*/
+            if (line & (1 << col)) {
                 gui_put_pixel(ctx, x + col, y + row, color);
             }
         }

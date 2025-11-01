@@ -83,6 +83,9 @@ void gui_update(GuiContext *ctx);
 void gui_set_pixel(GuiContext *ctx, int x, int y, Color color);
 Color gui_get_pixel(GuiContext *ctx, int x, int y);
 
+/* 像素操作 */
+void gui_put_pixel(GuiContext *ctx, int x, int y, Color color);
+
 /* 填充 */
 void gui_fill_rect(GuiContext *ctx, Rect rect, Color color);
 void gui_fill_screen(GuiContext *ctx, Color color);
@@ -191,5 +194,27 @@ void gui_window_close(Window *window);
 
 void gui_event_loop(GuiContext *ctx);
 bool gui_poll_event(GuiContext *ctx, Event *event);
+
+/* ========== 高级控件 ========== */
+
+/* 滑块 */
+typedef struct Slider Slider;
+
+Slider *gui_create_slider(int x, int y, int width, int height, 
+                          int min_val, int max_val, int initial_val);
+void gui_draw_slider(GuiContext *ctx, Slider *slider);
+bool gui_slider_mouse_event(Slider *slider, int mouse_x, int mouse_y, bool pressed);
+int gui_slider_get_value(Slider *slider);
+void gui_slider_set_value(Slider *slider, int value);
+
+/* 菜单 */
+typedef struct Menu Menu;
+
+Menu *gui_create_menu(int x, int y, int width);
+bool gui_menu_add_item(Menu *menu, const char *text, void (*callback)(void));
+void gui_draw_menu(GuiContext *ctx, Menu *menu, Font *font);
+bool gui_menu_mouse_event(Menu *menu, int mouse_x, int mouse_y, bool clicked);
+void gui_menu_set_visible(Menu *menu, bool visible);
+void gui_menu_toggle(Menu *menu);
 
 #endif /* _GUI_H */

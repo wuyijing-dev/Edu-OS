@@ -1040,6 +1040,8 @@ void kernel_main(void)
     extern int dev_null_init(void);
     extern int dev_zero_init(void);
     extern int dev_console_init(void);
+    extern int dev_mouse_init(void);
+    extern void mouse_init(void);
     
     /* 注册标准设备 */
     #if 0
@@ -1056,6 +1058,10 @@ void kernel_main(void)
     vga_puts("[VFS-DEBUG] Registering /dev/console\n");
     #endif
     dev_console_init();
+    
+    /* 初始化鼠标驱动和设备 */
+    mouse_init();
+    dev_mouse_init();
     
     #if 0
     vga_puts("[VFS-DEBUG] All devices registered\n");

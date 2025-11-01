@@ -52,6 +52,7 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/arch/i386/tss.c \
 	$(KERNEL_DIR)/drivers/timer.c \
 	$(KERNEL_DIR)/drivers/keyboard.c \
+	$(KERNEL_DIR)/drivers/mouse.c \
 	$(KERNEL_DIR)/drivers/block.c \
 	$(KERNEL_DIR)/drivers/ide.c \
 	$(KERNEL_DIR)/drivers/ramdisk.c \
@@ -77,6 +78,7 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/fs/dev_zero.c \
 	$(KERNEL_DIR)/fs/dev_console.c \
 	$(KERNEL_DIR)/fs/dev_fb.c \
+	$(KERNEL_DIR)/fs/dev_mouse.c \
 	$(KERNEL_DIR)/fs/procfs.c \
 	$(KERNEL_DIR)/fs/proc_cpuinfo.c \
 	$(KERNEL_DIR)/fs/proc_meminfo.c \
@@ -94,6 +96,7 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/syscall/sys_io.c \
 	$(KERNEL_DIR)/syscall/sys_process.c \
 	$(KERNEL_DIR)/syscall/sys_mem.c \
+	$(KERNEL_DIR)/syscall/sys_time.c \
 	$(KERNEL_DIR)/exec/elf_loader.c \
 	$(KERNEL_DIR)/exec/elf_exec.c \
 	$(KERNEL_DIR)/exec/usermode.c \
@@ -255,6 +258,10 @@ $(BUILD_DIR)/keyboard.o: $(KERNEL_DIR)/drivers/keyboard.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $<$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD_DIR)/mouse.o: $(KERNEL_DIR)/drivers/mouse.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (PS/2 Mouse)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(BUILD_DIR)/block.o: $(KERNEL_DIR)/drivers/block.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (Block Device)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -358,6 +365,10 @@ $(BUILD_DIR)/dev_fb.o: $(KERNEL_DIR)/fs/dev_fb.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (/dev/fb0)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD_DIR)/dev_mouse.o: $(KERNEL_DIR)/fs/dev_mouse.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (/dev/mouse)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
 # 第9章新增的ProcFS文件
 $(BUILD_DIR)/procfs.o: $(KERNEL_DIR)/fs/procfs.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (ProcFS Core)$(NC)"
@@ -427,6 +438,10 @@ $(BUILD_DIR)/sys_process.o: $(KERNEL_DIR)/syscall/sys_process.c | $(BUILD_DIR)
 
 $(BUILD_DIR)/sys_mem.o: $(KERNEL_DIR)/syscall/sys_mem.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (Syscall Memory)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/sys_time.o: $(KERNEL_DIR)/syscall/sys_time.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (Syscall Time)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # 第14-15章新增的用户态和ELF加载器
