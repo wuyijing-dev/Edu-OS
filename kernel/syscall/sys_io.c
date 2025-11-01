@@ -52,39 +52,8 @@ int sys_write(int fd, const char *buf, size_t count)
     }
     #endif
     
-    /* 调用 VFS并输出详细调试信息 */
-    extern void serial_putc(uint16_t port, char c);
-    
-    /* 输出系统调用参数 */
-    serial_putc(0x3F8, '\n');
-    serial_putc(0x3F8, 'W');
-    serial_putc(0x3F8, '(');
-    serial_putc(0x3F8, '0' + fd);
-    serial_putc(0x3F8, ',');
-    /* 输出count */
-    if (count < 10) {
-        serial_putc(0x3F8, '0' + count);
-    } else {
-        serial_putc(0x3F8, '0' + (count / 10));
-        serial_putc(0x3F8, '0' + (count % 10));
-    }
-    serial_putc(0x3F8, ')');
-    
-    int ret = vfs_write(fd, buf, count);
-    
-    /* 输出返回值 */
-    serial_putc(0x3F8, '=');
-    if (ret < 0) {
-        serial_putc(0x3F8, '-');
-    } else if (ret < 10) {
-        serial_putc(0x3F8, '0' + ret);
-    } else {
-        serial_putc(0x3F8, '0' + (ret / 10));
-        serial_putc(0x3F8, '0' + (ret % 10));
-    }
-    serial_putc(0x3F8, '\n');
-    
-    return ret;
+    /* 调用 VFS */
+    return vfs_write(fd, buf, count);
 }
 
 /*

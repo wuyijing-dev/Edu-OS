@@ -444,35 +444,9 @@ void context_switch(struct process *prev, struct process *next)
     /* Linux风格：如果调度器被锁定，拒绝切换（关键修复！）*/
     extern int scheduler_locked;
     if (scheduler_locked) {
-        extern void serial_putc(uint16_t port, char c);
-        serial_putc(0x3F8, '\n');
-        serial_putc(0x3F8, '[');
-        serial_putc(0x3F8, 'C');
-        serial_putc(0x3F8, 'X');
-        serial_putc(0x3F8, '_');
-        serial_putc(0x3F8, 'B');
-        serial_putc(0x3F8, 'L');
-        serial_putc(0x3F8, 'O');
-        serial_putc(0x3F8, 'C');
-        serial_putc(0x3F8, 'K');
-        serial_putc(0x3F8, ']');
-        serial_putc(0x3F8, '\n');
         return;  /* 拒绝切换，保持当前进程 */
     }
     
-    /* 调试：追踪所有context_switch调用 */
-    extern void serial_putc(uint16_t port, char c);
-    serial_putc(0x3F8, '\n');
-    serial_putc(0x3F8, '[');
-    serial_putc(0x3F8, 'C');
-    serial_putc(0x3F8, 'X');
-    serial_putc(0x3F8, ':');
-    /* 打印进程名首字母 */
-    if (next->name[0]) {
-        serial_putc(0x3F8, next->name[0]);
-    }
-    serial_putc(0x3F8, ']');
-    serial_putc(0x3F8, '\n');
     
     /* Linux风格：静默执行，减少调试输出 */
     #ifdef DEBUG_CONTEXT_SWITCH
@@ -488,16 +462,8 @@ void context_switch(struct process *prev, struct process *next)
      */
     if (next->page_dir) {
         extern void tss_set_kernel_stack(uint32_t stack);
-        extern void tss_verify(void);
         uint32_t tss_esp0 = next->kernel_stack + 4;
-        kprintf("[CONTEXT] Setting TSS.ESP0 = 0x%08x (kernel_stack=0x%08x)\n", 
-                tss_esp0, next->kernel_stack);
         tss_set_kernel_stack(tss_esp0);
-        
-        /* 首次切换时验证 TSS */
-        if (!prev) {
-            tss_verify();
-        }
     }
     
     /* Linux方式：通过全局变量传递CR3给汇编代码
@@ -522,16 +488,6 @@ void context_switch(struct process *prev, struct process *next)
         kprintf("[CONTEXT] Switching to %s (kernel thread, no CR3 switch)\n", next->name);
     }
     
-    /* 调试：打印栈帧内容 */
-    if (!prev && next->context.esp) {
-        uint32_t *stack = (uint32_t*)next->context.esp;
-        kprintf("[DEBUG] Stack at 0x%08x:\n", next->context.esp);
-        kprintf("        [0]=0x%08x (EIP)\n", stack[0]);
-        kprintf("        [1]=0x%08x (CS)\n", stack[1]);
-        kprintf("        [2]=0x%08x (EFLAGS)\n", stack[2]);
-        kprintf("        [3]=0x%08x (ESP)\n", stack[3]);
-        kprintf("        [4]=0x%08x (SS)\n", stack[4]);
-    }
     
     /* 执行上下文切换 */
     if (prev) {

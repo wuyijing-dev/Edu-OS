@@ -157,17 +157,6 @@ static int handle_page_fault(struct interrupt_frame *frame)
     uint32_t fault_addr;
     __asm__ volatile("mov %%cr2, %0" : "=r"(fault_addr));
     
-    /* 串口调试：输出缺页地址的十六进制 */
-    extern void serial_putc(uint16_t port, char c);
-    serial_putc(0x3F8, 'P');
-    serial_putc(0x3F8, 'F');
-    serial_putc(0x3F8, ':');
-    for (int i = 28; i >= 0; i -= 4) {
-        int digit = (fault_addr >> i) & 0xF;
-        serial_putc(0x3F8, digit < 10 ? '0' + digit : 'a' + digit - 10);
-    }
-    serial_putc(0x3F8, '\n');
-    
     /* 解析错误码 */
     bool present  = frame->err_code & 0x1;   // 页不存在
     bool write    = frame->err_code & 0x2;   // 写操作
@@ -212,24 +201,9 @@ static int handle_page_fault(struct interrupt_frame *frame)
     if (fault_addr < 0xC0000000) {
         proc = process_get_current();
         
-        /* 串口调试：进程信息 */
-        if (proc) {
-            serial_putc(0x3F8, 'P');
-            serial_putc(0x3F8, 'I');
-            serial_putc(0x3F8, 'D');
-            serial_putc(0x3F8, '=');
-            serial_putc(0x3F8, '0' + (proc->pid / 10));
-            serial_putc(0x3F8, '0' + (proc->pid % 10));
-            serial_putc(0x3F8, ' ');
-        }
-        
         if (proc) {
             /* 检查是否为COW（页存在但写保护） */
             if (present && write) {
-                serial_putc(0x3F8, 'C');
-                serial_putc(0x3F8, 'O');
-                serial_putc(0x3F8, 'W');
-                serial_putc(0x3F8, '\n');
                 /* Copy-On-Write: 页存在且尝试写入只读页 */
                 uint32_t vaddr = fault_addr & ~0xFFF;
                 extern uint32_t vmm_virt_to_phys_in_directory(struct page_directory *pd, uint32_t virt);
@@ -273,26 +247,6 @@ static int handle_page_fault(struct interrupt_frame *frame)
                         /* 刷新TLB */
                         __asm__ volatile("invlpg (%0)" : : "r"(vaddr) : "memory");
                         
-                        serial_putc(0x3F8, '[');
-                        serial_putc(0x3F8, 'C');
-                        serial_putc(0x3F8, 'O');
-                        serial_putc(0x3F8, 'W');
-                        serial_putc(0x3F8, '_');
-                        serial_putc(0x3F8, 'O');
-                        serial_putc(0x3F8, 'K');
-                        serial_putc(0x3F8, ']');
-                        
-                        /* 关键：验证调度器锁状态 */
-                        extern int scheduler_locked;
-                        serial_putc(0x3F8, ' ');
-                        serial_putc(0x3F8, 'L');
-                        serial_putc(0x3F8, 'O');
-                        serial_putc(0x3F8, 'C');
-                        serial_putc(0x3F8, 'K');
-                        serial_putc(0x3F8, '=');
-                        serial_putc(0x3F8, '0' + scheduler_locked);
-                        serial_putc(0x3F8, '\n');
-                        
                         return 0;  /* COW成功处理 */
                     }
                 }
@@ -300,61 +254,20 @@ static int handle_page_fault(struct interrupt_frame *frame)
             
             /* 检查VMA按需分配 */
             if (proc->vma_list && !present) {
-                serial_putc(0x3F8, 'V');
-                serial_putc(0x3F8, 'M');
-                serial_putc(0x3F8, 'A');
-                serial_putc(0x3F8, '?');
-                
                 /* 查找对应的 VMA */
                 struct vma *vma = vma_find(proc->vma_list, fault_addr);
                 if (vma) {
-                    serial_putc(0x3F8, 'Y');
-                    serial_putc(0x3F8, '\n');
-                    
                     /* 尝试按需分配 */
                     if (vma_handle_page_fault(vma, fault_addr, proc->page_dir) == 0) {
                         /* 缺页已处理，静默返回继续执行 */
-                        serial_putc(0x3F8, '\n');
-                        serial_putc(0x3F8, '[');
-                        serial_putc(0x3F8, 'O');
-                        serial_putc(0x3F8, 'K');
-                        serial_putc(0x3F8, ']');
-                        serial_putc(0x3F8, '\n');
                         return 0;  /* 成功处理 */
-                    } else {
-                        serial_putc(0x3F8, 'F');
-                        serial_putc(0x3F8, 'A');
-                        serial_putc(0x3F8, 'I');
-                        serial_putc(0x3F8, 'L');
-                        serial_putc(0x3F8, '\n');
                     }
-                } else {
-                    serial_putc(0x3F8, 'N');
-                    serial_putc(0x3F8, '\n');
                 }
-            } else if (!proc->vma_list) {
-                serial_putc(0x3F8, 'N');
-                serial_putc(0x3F8, 'O');
-                serial_putc(0x3F8, 'V');
-                serial_putc(0x3F8, 'M');
-                serial_putc(0x3F8, 'A');
-                serial_putc(0x3F8, '\n');
             }
         }
     }
     
     /* 用户空间缺页无法处理 - Linux风格错误处理 */
-    serial_putc(0x3F8, '\n');
-    serial_putc(0x3F8, 'U');
-    serial_putc(0x3F8, 'N');
-    serial_putc(0x3F8, 'H');
-    serial_putc(0x3F8, 'A');
-    serial_putc(0x3F8, 'N');
-    serial_putc(0x3F8, 'D');
-    serial_putc(0x3F8, 'L');
-    serial_putc(0x3F8, 'E');
-    serial_putc(0x3F8, 'D');
-    serial_putc(0x3F8, '\n');
     
     kprintf("\n[PAGE FAULT] Unhandled user space fault\n");
     kprintf("  Address: 0x%08x\n", fault_addr);
@@ -431,17 +344,7 @@ void exception_handler(struct interrupt_frame *frame)
         scheduler_enable_noschedule();
         
         if (pf_result == 0) {
-            /* 成功处理，直接返回到用户态继续执行 */
-            extern void serial_putc(uint16_t port, char c);
-            serial_putc(0x3F8, '[');
-            serial_putc(0x3F8, 'P');
-            serial_putc(0x3F8, 'F');
-            serial_putc(0x3F8, '_');
-            serial_putc(0x3F8, 'R');
-            serial_putc(0x3F8, 'E');
-            serial_putc(0x3F8, 'T');
-            serial_putc(0x3F8, ']');
-            serial_putc(0x3F8, '\n');
+            /* 成功处理，静默返回 */
             return;
         }
     }

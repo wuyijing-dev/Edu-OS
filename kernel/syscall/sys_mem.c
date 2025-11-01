@@ -136,14 +136,8 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
     /* Linux风格：实现copy_from_user来安全读取用户空间数据 */
     uint32_t args_ptr = (uint32_t)addr;
     
-    kprintf("[SYS_MMAP] Called with addr=0x%08x\n", args_ptr);
-    
     extern struct process *process_get_current(void);
     struct process *proc = process_get_current();
-    
-    kprintf("[SYS_MMAP] Current process: %s (PID %u)\n", 
-            proc ? proc->name : "NULL", proc ? proc->pid : 0);
-    kprintf("[SYS_MMAP] page_dir: 0x%08x\n", proc && proc->page_dir ? proc->page_dir->physical_addr : 0);
     
     /* 本地数组，从用户空间复制 */
     unsigned long args_copy[6];
@@ -189,7 +183,6 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
         }
     }
     
-    kprintf("[SYS_MMAP] ERROR: Invalid context or address\n");
     return (void*)-EINVAL;
 }
 
