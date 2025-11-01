@@ -3,7 +3,9 @@
  */
 
 #include "gui.h"
-#include "../stdlib.h"
+#include "../libc/stdlib/stdlib.h"
+
+/* gui_put_pixel在gui_core.c中实现，因为需要访问GuiContext内部 */
 
 /* 辅助函数：Alpha混合 */
 static Color blend_color(Color bg, Color fg)

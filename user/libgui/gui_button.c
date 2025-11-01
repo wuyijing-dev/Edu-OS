@@ -3,8 +3,8 @@
  */
 
 #include "gui.h"
-#include "../stdlib.h"
-#include "../string.h"
+#include "../libc/stdlib/stdlib.h"
+#include "../libc/string/string.h"
 
 /* 按钮状态 */
 typedef enum {

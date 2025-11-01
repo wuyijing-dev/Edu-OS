@@ -1789,7 +1789,7 @@ void kernel_main(void)
             extern pid_t create_user_process_lazy(const char *name, const char *elf_path);
             
             kprintf("      Loading /min.elf (Linux-style demand paging)...\n");
-            pid_t gui_pid = create_user_process_lazy("gui_demo", "/gui.elf");
+            pid_t gui_pid = create_user_process_lazy("desktop", "/desktop.elf");
             
             if (gui_pid > 0) {
                 kprintf("      ✅ GUI Demo loaded (PID %u)\n", gui_pid);

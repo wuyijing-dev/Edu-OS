@@ -7,7 +7,7 @@
 #ifndef _GUI_H
 #define _GUI_H
 
-#include "../types.h"
+#include "../libc/syscall/types.h"
 
 /* ========== 颜色定义 ========== */
 typedef uint32_t Color;

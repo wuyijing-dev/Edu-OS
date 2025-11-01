@@ -3,7 +3,7 @@
  */
 
 #include "gui.h"
-#include "../stdlib.h"
+#include "../libc/stdlib/stdlib.h"
 
 /*
  * 创建控件

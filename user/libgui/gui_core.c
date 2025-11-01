@@ -3,10 +3,10 @@
  */
 
 #include "gui.h"
-#include "../unistd.h"
-#include "../stdio.h"
-#include "../stdlib.h"
-#include "../string.h"
+#include "../libc/syscall/unistd.h"
+#include "../libc/stdio/stdio.h"
+#include "../libc/stdlib/stdlib.h"
+#include "../libc/string/string.h"
 
 /* GUI上下文 */
 struct GuiContext {
@@ -108,6 +108,17 @@ int gui_get_width(GuiContext *ctx)
 int gui_get_height(GuiContext *ctx)
 {
     return ctx ? ctx->height : 0;
+}
+
+/*
+ * 绘制单个像素
+ */
+void gui_put_pixel(GuiContext *ctx, int x, int y, Color color)
+{
+    if (!ctx || !ctx->framebuffer) return;
+    if (x < 0 || x >= ctx->width || y < 0 || y >= ctx->height) return;
+    
+    ctx->framebuffer[y * ctx->width + x] = color;
 }
 
 /*

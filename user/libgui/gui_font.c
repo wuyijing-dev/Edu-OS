@@ -1,27 +1,16 @@
 /*
- * gui_font.c - 字体渲染（简化的8x16位图字体）
+ * gui_font.c - 字体渲染（VGA 8x16位图字体）
  */
 
 #include "gui.h"
-#include "../stdlib.h"
-#include "../string.h"
+#include "../libc/stdlib/stdlib.h"
+#include "../libc/string/string.h"
+#include "font_8x16.h"
 
-/* 简化的字体结构 */
+/* 字体结构 */
 struct Font {
     int char_width;
     int char_height;
-    const uint8_t *data;  /* 将使用内嵌的简单字体数据 */
-};
-
-/* 简化的8x8字体数据（部分ASCII字符） */
-static const uint8_t simple_font_8x8[][8] = {
-    /* 'A' (65) */
-    {0x18, 0x24, 0x42, 0x42, 0x7E, 0x42, 0x42, 0x42},
-    /* 'B' */
-    {0x7C, 0x42, 0x42, 0x7C, 0x42, 0x42, 0x42, 0x7C},
-    /* 'C' */
-    {0x3C, 0x42, 0x40, 0x40, 0x40, 0x40, 0x42, 0x3C},
-    /* ... 更多字符会在完整实现中添加 */
 };
 
 /*
@@ -34,32 +23,38 @@ Font *gui_load_font(GuiContext *ctx)
     Font *font = malloc(sizeof(Font));
     if (!font) return NULL;
     
-    font->char_width = 8;
-    font->char_height = 16;
-    font->data = NULL;  /* 简化实现 */
+    font->char_width = VGA_FONT_WIDTH;
+    font->char_height = VGA_FONT_HEIGHT;
     
     return font;
 }
 
 /*
- * 绘制单个字符（简化版：用矩形代替）
+ * 绘制单个字符（VGA 8x16位图字体）
  */
 static void draw_char_simple(GuiContext *ctx, int x, int y, char c, Color color)
 {
-    /* 简化实现：每个字符用一个小方块表示 */
-    Rect char_rect = {x, y, 8, 16};
+    /* 只支持可打印ASCII字符（32-122）*/
+    if (c < 32 || c > 122) {
+        c = '?';  /* 不支持的字符显示为? */
+    }
     
-    if (c >= 'A' && c <= 'Z') {
-        /* 大写字母：填充80% */
-        gui_fill_rect(ctx, (Rect){x+1, y+2, 6, 12}, color);
-    } else if (c >= 'a' && c <= 'z') {
-        /* 小写字母：填充60% */
-        gui_fill_rect(ctx, (Rect){x+1, y+4, 6, 8}, color);
-    } else if (c == ' ') {
-        /* 空格：不绘制 */
-    } else {
-        /* 其他字符：小方块 */
-        gui_fill_rect(ctx, (Rect){x+2, y+6, 4, 4}, color);
+    int index = c - 32;
+    if (index >= VGA_FONT_CHARS) {
+        return;
+    }
+    
+    const uint8_t *bitmap = vga_font_8x16[index];
+    
+    /* 逐行绘制字符 */
+    for (int row = 0; row < VGA_FONT_HEIGHT; row++) {
+        uint8_t line = bitmap[row];
+        for (int col = 0; col < VGA_FONT_WIDTH; col++) {
+            /* 测试位：从高位到低位（bit 7到bit 0）*/
+            if (line & (1 << (7 - col))) {
+                gui_put_pixel(ctx, x + col, y + row, color);
+            }
+        }
     }
 }
 

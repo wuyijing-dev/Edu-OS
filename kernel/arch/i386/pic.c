@@ -222,7 +222,9 @@ uint16_t pic_get_isr(void)
 {
     outb(PIC_MASTER_CMD, PIC_READ_ISR);
     outb(PIC_SLAVE_CMD, PIC_READ_ISR);
-    return ((uint16_t)inb(PIC_SLAVE_CMD) << 8) | inb(PIC_MASTER_CMD);
+    uint16_t master = inb(PIC_MASTER_CMD);
+    uint16_t slave = inb(PIC_SLAVE_CMD);
+    return (slave << 8) | master;
 }
 
 /*
