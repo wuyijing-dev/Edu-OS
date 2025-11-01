@@ -57,6 +57,7 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/drivers/ide.c \
 	$(KERNEL_DIR)/drivers/ramdisk.c \
 	$(KERNEL_DIR)/drivers/bga.c \
+	$(KERNEL_DIR)/drivers/rtl8139.c \
 	$(KERNEL_DIR)/mm/pmm.c \
 	$(KERNEL_DIR)/mm/vmm.c \
 	$(KERNEL_DIR)/mm/kmalloc.c \
@@ -97,6 +98,9 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/syscall/sys_process.c \
 	$(KERNEL_DIR)/syscall/sys_mem.c \
 	$(KERNEL_DIR)/syscall/sys_time.c \
+	$(KERNEL_DIR)/net/netdev.c \
+	$(KERNEL_DIR)/net/ethernet.c \
+	$(KERNEL_DIR)/net/ip.c \
 	$(KERNEL_DIR)/exec/elf_loader.c \
 	$(KERNEL_DIR)/exec/elf_exec.c \
 	$(KERNEL_DIR)/exec/usermode.c \
@@ -278,6 +282,10 @@ $(BUILD_DIR)/bga.o: $(KERNEL_DIR)/drivers/bga.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (BGA Graphics)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD_DIR)/rtl8139.o: $(KERNEL_DIR)/drivers/rtl8139.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (RTL8139 Network)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
 # 第4章新增的内存管理文件
 $(BUILD_DIR)/pmm.o: $(KERNEL_DIR)/mm/pmm.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (PMM)$(NC)"
@@ -444,6 +452,19 @@ $(BUILD_DIR)/sys_time.o: $(KERNEL_DIR)/syscall/sys_time.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (Syscall Time)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
+# 网络子系统
+$(BUILD_DIR)/netdev.o: $(KERNEL_DIR)/net/netdev.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (Network Device)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/ethernet.o: $(KERNEL_DIR)/net/ethernet.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (Ethernet)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/ip.o: $(KERNEL_DIR)/net/ip.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (IP/ARP/ICMP)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
 # 第14-15章新增的用户态和ELF加载器
 $(BUILD_DIR)/elf_loader.o: $(KERNEL_DIR)/exec/elf_loader.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (ELF Loader)$(NC)"
@@ -549,10 +570,14 @@ run: $(OS_IMG)
 		$(QEMU) -hda $(OS_IMG) \
 			-hdb $(BUILD_DIR)/fat32_test.img \
 			-vga std \
+			-netdev user,id=net0 \
+			-device rtl8139,netdev=net0 \
 			-serial stdio -m 128M; \
 	else \
 		$(QEMU) -hda $(OS_IMG) \
 			-vga std \
+			-netdev user,id=net0 \
+			-device rtl8139,netdev=net0 \
 			-serial stdio -m 128M; \
 	fi
 

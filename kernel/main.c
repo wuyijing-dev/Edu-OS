@@ -1063,6 +1063,21 @@ void kernel_main(void)
     mouse_init();
     dev_mouse_init();
     
+    /* 初始化网络子系统 */
+    extern void netdev_init(void);
+    extern int rtl8139_init(void);
+    
+    kprintf("[NET] Initializing network subsystem...\n");
+    netdev_init();
+    
+    kprintf("[NET] Scanning for RTL8139 network card...\n");
+    int ret = rtl8139_init();
+    if (ret == 0) {
+        kprintf("[NET] ✓ RTL8139 network card initialized\n");
+    } else {
+        kprintf("[NET] RTL8139 network card not found (ret=%d)\n", ret);
+    }
+    
     #if 0
     vga_puts("[VFS-DEBUG] All devices registered\n");
     vga_puts("[VFS-DEBUG] VFS test completed, system stable\n\n");

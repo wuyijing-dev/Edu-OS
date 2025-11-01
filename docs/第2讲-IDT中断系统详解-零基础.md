@@ -933,7 +933,7 @@ void pic_mask_irq(uint8_t irq)
 
 ---
 
-## 📖 第七课：实现定时器中断
+## 📖 第七课：实现定时器中断（详细版）
 
 基于 `kernel/drivers/timer.c`。
 
@@ -949,61 +949,346 @@ void pic_mask_irq(uint8_t irq)
   → 性能统计
 ```
 
-### 7.2 PIT 编程（实际实现）
+### 7.2 PIT 8253/8254 芯片详解
+
+**什么是 PIT？**
+
+PIT = Programmable Interval Timer（可编程间隔定时器）
+
+**芯片型号：**
+- Intel 8253（早期）
+- Intel 8254（现代PC）
+
+**PIT 有 3 个独立的计数器（通道）：**
+
+```
+通道 0：
+  - 连接到 IRQ 0
+  - 用于系统时钟
+  - 我们主要使用这个
+  
+通道 1：
+  - DRAM 刷新
+  - 系统自动使用
+  - 不要修改！
+  
+通道 2：
+  - PC 扬声器
+  - 可以用来发声（蜂鸣器）
+  - 可选功能
+```
+
+### 7.3 PIT 寄存器和端口
+
+**I/O 端口地址：**
+
+```c
+#define PIT_CHANNEL0    0x40    // 通道0数据端口
+#define PIT_CHANNEL1    0x41    // 通道1数据端口
+#define PIT_CHANNEL2    0x42    // 通道2数据端口
+#define PIT_COMMAND     0x43    // 命令寄存器
+```
+
+**命令寄存器（端口 0x43）格式：**
+
+```
+Bit 7-6: 选择通道（SC - Select Counter）
+  00 = 通道 0
+  01 = 通道 1
+  10 = 通道 2
+  11 = 回读命令（8254专用）
+
+Bit 5-4: 读写模式（RW - Read/Write）
+  00 = 锁存计数值
+  01 = 只读/写低字节
+  10 = 只读/写高字节
+  11 = 先低字节后高字节（16位）
+
+Bit 3-1: 工作模式（Mode）
+  000 = 模式0：中断结束时计数
+  001 = 模式1：硬件可重触发单稳态
+  010 = 模式2：分频器（速率发生器）
+  011 = 模式3：方波发生器 ← 我们用这个！
+  100 = 模式4：软件触发选通
+  101 = 模式5：硬件触发选通
+
+Bit 0: 计数格式（BCD）
+  0 = 二进制（0-65535）
+  1 = BCD（0-9999）
+```
+
+**常用命令字示例：**
+
+```c
+// 通道0，方波模式，16位，二进制
+0x36 = 0011 0110
+       ││││ ││││
+       ││││ │││└─ BCD=0（二进制）
+       ││││ └┴─── Mode=011（方波）
+       ││└┴────── RW=11（16位）
+       └┴──────── SC=00（通道0）
+
+// 通道2，方波模式，16位，二进制（扬声器）
+0xB6 = 1011 0110
+       ││││ ││││
+       ││││ │││└─ BCD=0
+       ││││ └┴─── Mode=011
+       ││└┴────── RW=11
+       └┴──────── SC=10（通道2）
+```
+
+### 7.4 PIT 频率计算详解
+
+**核心概念：**
+
+```
+PIT 输入时钟频率（固定）：
+  1.193182 MHz = 1,193,182 Hz
+  
+这个频率来自哪里？
+  主板晶振频率 / 分频器
+  = 14.31818 MHz / 12
+  = 1.193182 MHz
+  
+为什么是这个奇怪的数字？
+  历史原因：IBM PC 兼容性
+  14.31818 MHz 是 NTSC 彩色副载波频率的 3 倍
+```
+
+**分频器计算公式：**
+
+```
+输出频率 = 输入频率 / 分频值
+
+分频值 = 输入频率 / 输出频率
+       = 1193182 / 目标频率
+
+示例：
+  目标频率 = 100 Hz（每秒100次中断）
+  分频值 = 1193182 / 100 = 11931.82 ≈ 11932
+  
+  实际频率 = 1193182 / 11932 = 100.01 Hz
+  误差 = 0.01 Hz（可以忽略）
+```
+
+**频率范围限制：**
+
+```
+最小分频值：1
+  → 最高频率 = 1193182 Hz（约1.2 MHz）
+  → 但实际上太快，CPU处理不过来
+  
+最大分频值：65535（16位最大值）
+  → 最低频率 = 1193182 / 65535 ≈ 18.2 Hz
+  
+推荐范围：
+  18 Hz ~ 1000 Hz
+  
+常用频率：
+  - 18.2 Hz：DOS 默认（65536分频）
+  - 100 Hz：Linux 早期默认
+  - 1000 Hz：现代 Linux（CONFIG_HZ=1000）
+```
+
+**精度计算示例：**
+
+```c
+/* 计算不同目标频率的实际值 */
+
+目标 100 Hz：
+  分频值 = 1193182 / 100 = 11931.82 → 11932
+  实际频率 = 1193182 / 11932 = 100.01 Hz
+  误差 = 0.01%（优秀）
+  
+目标 1000 Hz：
+  分频值 = 1193182 / 1000 = 1193.182 → 1193
+  实际频率 = 1193182 / 1193 = 1000.15 Hz
+  误差 = 0.015%（优秀）
+  
+目标 60 Hz（视频同步）：
+  分频值 = 1193182 / 60 = 19886.37 → 19886
+  实际频率 = 1193182 / 19886 = 60.00 Hz
+  误差 = 0.001%（完美）
+```
+
+### 7.5 PIT 工作模式详解
+
+**模式 3：方波发生器（我们使用的）**
+
+```
+时序图：
+  
+  初始值 = 4
+  
+  ┌───┐   ┌───┐   ┌───┐
+  │   │   │   │   │   │
+  │   └───┘   └───┘   └───
+  
+  计数：4 3 2 1 4 3 2 1 4 3...
+  输出：高→低→高→低→高...
+  
+特点：
+  - 输出 50% 占空比的方波
+  - 自动重载计数值
+  - 适合做时钟信号
+  - IRQ 0 在下降沿触发
+```
+
+**其他模式对比：**
+
+```
+模式 0：中断结束时计数
+  - 计数到0后输出高电平
+  - 不自动重载
+  - 用于单次定时
+  
+模式 2：分频器
+  - 计数到1时输出脉冲
+  - 自动重载
+  - 输出不对称波形
+  
+模式 4：软件触发选通
+  - 软件触发后开始计数
+  - 计数到0输出脉冲
+  - 不自动重载
+```
+
+### 7.6 PIT 编程实现（详细注释版）
 
 基于 `kernel/drivers/timer.c`:
 
 ```c
+/* ============================================
+ * PIT 8253/8254 定时器驱动
+ * ============================================ */
+
+/* PIT 常量定义 */
 #define PIT_FREQUENCY   1193182  // PIT输入频率（Hz）
-#define PIT_COMMAND     0x43
-#define PIT_CHANNEL0    0x40
+#define PIT_COMMAND     0x43     // 命令寄存器端口
+#define PIT_CHANNEL0    0x40     // 通道0数据端口
+#define PIT_CHANNEL1    0x41     // 通道1数据端口
+#define PIT_CHANNEL2    0x42     // 通道2数据端口
 
-/* 命令字节定义 */
-#define PIT_CMD_CHANNEL0  0x00  // 选择通道0
-#define PIT_CMD_MODE3     0x06  // 方波模式
-#define PIT_CMD_BOTH      0x30  // 先低字节后高字节
-#define PIT_CMD_BINARY    0x00  // 二进制模式
+/* 命令字节位定义 */
+#define PIT_CMD_CHANNEL0  0x00  // 选择通道0 (Bit 7-6 = 00)
+#define PIT_CMD_CHANNEL1  0x40  // 选择通道1 (Bit 7-6 = 01)
+#define PIT_CMD_CHANNEL2  0x80  // 选择通道2 (Bit 7-6 = 10)
 
+#define PIT_CMD_LATCH     0x00  // 锁存计数值 (Bit 5-4 = 00)
+#define PIT_CMD_LOW       0x10  // 只读/写低字节 (Bit 5-4 = 01)
+#define PIT_CMD_HIGH      0x20  // 只读/写高字节 (Bit 5-4 = 10)
+#define PIT_CMD_BOTH      0x30  // 先低后高16位 (Bit 5-4 = 11)
+
+#define PIT_CMD_MODE0     0x00  // 模式0：中断结束时计数
+#define PIT_CMD_MODE1     0x02  // 模式1：硬件可重触发单稳态
+#define PIT_CMD_MODE2     0x04  // 模式2：分频器
+#define PIT_CMD_MODE3     0x06  // 模式3：方波发生器 ← 推荐
+#define PIT_CMD_MODE4     0x08  // 模式4：软件触发选通
+#define PIT_CMD_MODE5     0x0A  // 模式5：硬件触发选通
+
+#define PIT_CMD_BINARY    0x00  // 二进制计数（0-65535）
+#define PIT_CMD_BCD       0x01  // BCD计数（0-9999）
+
+/* 全局变量 */
+static uint32_t timer_frequency = 0;  // 实际定时器频率
+static volatile uint64_t system_ticks = 0;  // 系统tick计数
+
+/**
+ * 初始化PIT定时器
+ * 
+ * @param frequency 目标频率（Hz）
+ * 
+ * 频率范围：
+ *   最小：18 Hz（分频值65535）
+ *   最大：1193182 Hz（分频值1）
+ *   推荐：100-1000 Hz
+ */
 void timer_init(uint32_t frequency)
 {
-    /* 验证频率范围 */
+    /* ===== 步骤1：验证频率范围 ===== */
     if (frequency < 18 || frequency > 1193182) {
-        kprintf("[TIMER] Error: Invalid frequency\n");
+        kprintf("[TIMER] Error: Invalid frequency %d Hz\n", frequency);
+        kprintf("[TIMER] Valid range: 18 - 1193182 Hz\n");
         frequency = 100;  // 使用默认值
     }
     
-    /* 计算分频值 */
+    /* ===== 步骤2：计算分频值 ===== */
+    /*
+     * 公式：divisor = PIT_FREQUENCY / target_frequency
+     * 
+     * 示例：
+     *   100 Hz → 1193182 / 100 = 11931.82 → 11932
+     *   1000 Hz → 1193182 / 1000 = 1193.182 → 1193
+     */
     uint32_t divisor = PIT_FREQUENCY / frequency;
+    
+    /* 限制在16位范围内（0-65535） */
     if (divisor > 65535) {
-        divisor = 65535;  // 16位最大值
+        divisor = 65535;
+        kprintf("[TIMER] Warning: Divisor clamped to 65535\n");
+    }
+    if (divisor == 0) {
+        divisor = 1;
+        kprintf("[TIMER] Warning: Divisor set to minimum (1)\n");
     }
     
-    /* 发送命令字：通道0，方波，二进制，先低后高 */
-    uint8_t command = PIT_CMD_CHANNEL0 | PIT_CMD_MODE3 | 
-                      PIT_CMD_BOTH | PIT_CMD_BINARY;
-    outb(PIT_COMMAND, command);  // 0x43, 0x36
+    /* ===== 步骤3：构造命令字 ===== */
+    /*
+     * 命令字 = 通道选择 | 读写模式 | 工作模式 | 计数格式
+     * 
+     * 我们使用：
+     *   通道0（系统时钟）
+     *   16位读写（先低后高）
+     *   模式3（方波）
+     *   二进制计数
+     */
+    uint8_t command = PIT_CMD_CHANNEL0 |  // 通道0
+                      PIT_CMD_BOTH |      // 16位
+                      PIT_CMD_MODE3 |     // 方波模式
+                      PIT_CMD_BINARY;     // 二进制
     
-    /* 发送分频值（低字节+高字节） */
-    outb(PIT_CHANNEL0, divisor & 0xFF);
-    outb(PIT_CHANNEL0, (divisor >> 8) & 0xFF);
+    /* ===== 步骤4：发送命令到PIT ===== */
+    outb(PIT_COMMAND, command);  // 0x43 ← 0x36
     
-    /* 注册并启用IRQ 0 */
+    /* ===== 步骤5：发送分频值 ===== */
+    /*
+     * 必须先发送低字节，再发送高字节
+     * 这是由命令字中的 PIT_CMD_BOTH 决定的
+     */
+    outb(PIT_CHANNEL0, divisor & 0xFF);         // 低8位
+    outb(PIT_CHANNEL0, (divisor >> 8) & 0xFF);  // 高8位
+    
+    /* ===== 步骤6：注册中断处理程序 ===== */
     irq_install_handler(0, timer_handler);
-    irq_enable(0);
+    irq_enable(0);  // 启用IRQ 0
     
-    /* 计算实际频率 */
-    uint32_t actual_freq = PIT_FREQUENCY / divisor;
-    kprintf("[TIMER] Requested: %d Hz, Actual: %d Hz\n", 
-            frequency, actual_freq);
-    kprintf("[TIMER] Tick interval: %d ms\n", 1000 / actual_freq);
+    /* ===== 步骤7：计算并显示实际频率 ===== */
+    timer_frequency = PIT_FREQUENCY / divisor;
+    
+    kprintf("[TIMER] PIT Timer initialized\n");
+    kprintf("[TIMER] Requested: %d Hz, Actual: %d Hz (divisor: %d)\n", 
+            frequency, timer_frequency, divisor);
+    kprintf("[TIMER] Tick interval: %d.%03d ms\n", 
+            1000 / timer_frequency,
+            (1000 % timer_frequency) * 1000 / timer_frequency);
+    
+    /* 计算误差 */
+    int32_t error = (int32_t)timer_frequency - (int32_t)frequency;
+    if (error != 0) {
+        kprintf("[TIMER] Frequency error: %s%d Hz (%.3f%%)\n",
+                error > 0 ? "+" : "", error,
+                (float)error * 100.0f / frequency);
+    }
 }
 ```
 
 **实际代码的改进：**
+- ✅ 详细的步骤注释（便于理解）
 - ✅ 频率范围验证（防止无效值）
-- ✅ 使用宏定义代替魔术数字（更清晰）
-- ✅ 输出实际频率（精度反馈）
-- ✅ 16位边界检查（避免溢出）
+- ✅ 分频值边界检查（防止溢出）
+- ✅ 使用宏定义（代码清晰）
+- ✅ 输出实际频率和误差（调试友好）
+- ✅ 毫秒级精度显示（更准确）
 
 ### 7.3 定时器中断处理（实际实现）
 
