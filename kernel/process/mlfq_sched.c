@@ -153,20 +153,35 @@ struct process *mlfq_pick_next(void)
     /* Linux风格：从队列中peek而不是dequeue
      * 原因：调度器会在context_switch后修改状态，不应该在pick时移除
      */
+    int total_checked = 0;
     for (int level = 0; level < MLFQ_LEVELS; level++) {
         struct mlfq_queue *queue = &mlfq.levels[level];
         
+        kprintf("[MLFQ_DEBUG] Level %d: count=%d, head=%p\n", level, queue->count, queue->head);
+        
         if (queue->count > 0 && queue->head) {
-            struct process *next = queue->head;
-            
-            /* Linux风格：仅返回进程，不从队列移除
-             * scheduler会在实际运行后调用mlfq_dequeue
-             */
-            return next;
+            /* 遍历队列，跳过TERMINATED状态的进程 */
+            struct process *proc = queue->head;
+            while (proc) {
+                total_checked++;
+                kprintf("[MLFQ_DEBUG] Checking PID %u (%s): state=%d, next=%p\n",
+                        proc->pid, proc->name, proc->state, proc->next);
+                
+                if (proc->state == PROCESS_STATE_READY || 
+                    proc->state == PROCESS_STATE_RUNNING) {
+                    /* Linux风格：仅返回进程，不从队列移除
+                     * scheduler会在实际运行后调用mlfq_dequeue
+                     */
+                    kprintf("[MLFQ_DEBUG] Picked PID %u\n", proc->pid);
+                    return proc;
+                }
+                proc = proc->next;
+            }
         }
     }
     
-    /* 所有队列都空 */
+    /* 所有队列都空或只有TERMINATED进程 */
+    kprintf("[MLFQ_DEBUG] No READY process (checked %d total)\n", total_checked);
     return NULL;
 }
 

@@ -537,7 +537,29 @@ pid_t create_user_process_lazy(const char *name, const char *elf_path)
         return -1;
     }
     
-    vfs_file_read(proc->fd_table->files[3], (char*)phdrs, sizeof(Elf32_Phdr) * ehdr.e_phnum);
+    kprintf("[USER_PROC_LAZY] Reading program headers: offset=%u, count=%u, size=%u bytes\n",
+            ehdr.e_phoff, ehdr.e_phnum, sizeof(Elf32_Phdr) * ehdr.e_phnum);
+    
+    /* 需要先seek到程序头表位置 */
+    kprintf("[USER_PROC_LAZY] Before seek: file->pos=%u, inode=%p\n", 
+            proc->fd_table->files[3]->pos, proc->fd_table->files[3]->inode);
+    proc->fd_table->files[3]->pos = ehdr.e_phoff;
+    kprintf("[USER_PROC_LAZY] After seek: file->pos=%u\n", proc->fd_table->files[3]->pos);
+    
+    ssize_t read_bytes = vfs_file_read(proc->fd_table->files[3], (char*)phdrs, sizeof(Elf32_Phdr) * ehdr.e_phnum);
+    kprintf("[USER_PROC_LAZY] After read: file->pos=%u, read_bytes=%d\n", 
+            proc->fd_table->files[3]->pos, read_bytes);
+    
+    if (read_bytes != sizeof(Elf32_Phdr) * ehdr.e_phnum) {
+        kprintf("[USER_PROC_LAZY] Failed to read program headers: expected=%u, got=%d\n",
+                sizeof(Elf32_Phdr) * ehdr.e_phnum, read_bytes);
+        kfree(phdrs);
+        vmm_destroy_page_directory(proc->page_dir);
+        kfree(kernel_stack_base);
+        kfree(proc->fd_table);
+        kfree(proc);
+        return -1;
+    }
     
     kprintf("[USER_PROC_LAZY] Creating VMAs for ELF segments (demand paging)...\n");
     

@@ -10,7 +10,7 @@
 #include <process/process.h>
 
 #define MLFQ_LEVELS 5           /* 5个队列级别 */
-#define MLFQ_BASE_QUANTUM 10    /* 基础时间片：10 ticks */
+#define MLFQ_BASE_QUANTUM 100   /* 基础时间片：100 ticks (Linux风格：更长的时间片减少上下文切换开销) */
 #define MLFQ_BOOST_INTERVAL 1000 /* 提升间隔：1000 ticks */
 
 /* MLFQ调度器初始化 */

@@ -295,9 +295,10 @@ static void desktop_main_loop(void)
  */
 void _start(void)
 {
-    printf("=== EduOS Desktop Starting ===\n");
+    /* 使用最基本的write测试，确保程序启动 */
+    const char *msg = "=== EduOS Desktop Starting ===\n";
+    write(1, msg, 32);
     
-    /* 初始化GUI */
     printf("[Desktop] Initializing GUI system...\n");
     desktop.gui = gui_init();
     if (!desktop.gui) {

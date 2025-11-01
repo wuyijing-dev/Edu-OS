@@ -24,6 +24,12 @@ static void timer_handler(struct interrupt_frame *frame)
     
     system_ticks++;
     
+    /* 每1000个tick输出一次，检查timer是否在运行 */
+    if (system_ticks % 1000 == 0) {
+        extern void serial_puts(uint16_t port, const char *str);
+        serial_puts(0x3F8, "[TIMER_ALIVE]\n");
+    }
+    
     /* 调用调度器tick（如果调度器已初始化） */
     extern void scheduler_tick(void);
     scheduler_tick();

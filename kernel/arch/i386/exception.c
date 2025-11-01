@@ -171,29 +171,27 @@ static int handle_page_fault(struct interrupt_frame *frame)
      * 3. 如果在用户空间，由进程管理器处理（当前未实现）
      */
     
-    if (!present && !user && fault_addr >= 0xC0000000) {
-        /* 内核空间缺页 - 这通常不应该发生 */
-        /* 在完整实现中，这里可能是按需分配堆内存 */
-    }
+    /* 
+     * 关键修复：判断是否是内核代表用户进程访问用户空间
+     * 
+     * 场景：系统调用中，内核代码（如dev_console_write）访问用户空间缓冲区
+     * 此时：error_code的user bit = 0（内核模式），但fault_addr在用户空间
+     * 
+     * 解决：如果fault_addr < 0xC0000000，无论error_code如何，都尝试按需加载
+     */
+    bool kernel_accessing_user = (!user && fault_addr < 0xC0000000);
     
-    /* 内核模式缺页：打印详细信息 */
-    if (!user) {
-        kprintf("\n!!! EXCEPTION: Page Fault !!!\n");
+    /* 真正的内核空间缺页（内核地址 + 内核模式）*/
+    if (!user && fault_addr >= 0xC0000000) {
+        kprintf("\n!!! EXCEPTION: Kernel Space Page Fault !!!\n");
         kprintf("Fault Address: 0x%08x\n", fault_addr);
         kprintf("Error Code: 0x%08x\n", frame->err_code);
-        kprintf("  Cause: %s %s in %s mode%s%s\n",
+        kprintf("  EIP: 0x%08x, CS: 0x%04x\n", frame->eip, frame->cs);
+        kprintf("  Cause: %s %s in kernel mode\n",
                 write ? "Write" : ifetch ? "Instruction fetch" : "Read",
-                present ? "protection violation" : "non-present page",
-                user ? "user" : "kernel",
-                reserved ? ", reserved bit set" : "",
-                ifetch ? ", instruction fetch" : "");
-    }
-    
-    /* 如果在用户模式，可以尝试恢复；内核模式则必须panic */
-    if (!user) {
-        /* 内核空间缺页是严重错误 */
+                present ? "protection violation" : "non-present page");
         panic("Kernel page fault");
-        return -1;  /* 不会执行到这里 */
+        return -1;
     }
     
     /* 用户空间缺页 - 检查是否可以按需分配或COW */
@@ -281,8 +279,17 @@ static int handle_page_fault(struct interrupt_frame *frame)
         proc->state = PROCESS_STATE_TERMINATED;
         proc->exit_code = -11;  /* SIGSEGV */
         
+        /* 关键：在调度前必须enable scheduler，否则schedule()会直接返回
+         * 注意：此时我们在exception_handler中，scheduler已被disable（第335行）
+         * 我们需要临时enable它以便切换到下一个进程
+         */
+        extern void scheduler_enable_noschedule(void);
         extern void scheduler_schedule(void);
+        scheduler_enable_noschedule();  /* 临时enable */
         scheduler_schedule();
+        /* 注意：如果schedule成功，这里不会返回
+         * 如果返回了，说明没有其他进程，我们会在exception_handler中再次enable
+         */
     }
     
     return -1;  /* 无法处理 */

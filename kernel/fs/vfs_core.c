@@ -463,8 +463,14 @@ struct vfs_file *vfs_open_file(const char *path, int flags, int mode)
     /* 复制文件结构 */
     memcpy(file, global_file, sizeof(struct vfs_file));
     
-    /* 关闭全局fd（我们已经复制了文件结构） */
-    vfs_close(global_fd);
+    /* 重要：不要关闭全局fd！
+     * 因为我们复制的vfs_file中的inode指针指向全局文件的inode
+     * 如果关闭全局fd，inode可能被释放，导致后续读取失败
+     * 
+     * TODO: 实现inode引用计数机制
+     * 目前的workaround：保持全局fd打开，让VFS管理其生命周期
+     */
+    /* vfs_close(global_fd); - 不要关闭！ */
     
     return file;
 }

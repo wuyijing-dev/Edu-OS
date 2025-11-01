@@ -115,7 +115,7 @@ void kernel_main(void)
     extern int dev_mouse_init(void);
     extern void mouse_init(void);
     
-    /* 注册标准设备 */  
+    /* 注册标准设备 */
     dev_null_init();
     
     dev_zero_init();
@@ -266,8 +266,7 @@ void kernel_main(void)
                     asm volatile("hlt");
                 }
             } else {
-                kprintf("      ❌ Failed to load desktop.elf (PID: %d)\n", desktop_pid);
-                kprintf("      ℹ️  Make sure desktop.elf is in the FAT32 disk\n");
+                kprintf("      ❌ Failed to load desktop.elf\n");
             }
         } else {
             kprintf("      ⚠️  No FAT32 disk mounted\n");
