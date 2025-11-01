@@ -57,6 +57,16 @@ struct cpu_context {
     uint32_t ss;        /* 栈段选择器（切换特权级时使用） */
 } __attribute__((packed));
 
+/* 前向声明 */
+struct vfs_file;
+
+/* 文件描述符表 */
+#define MAX_FILES_PER_PROCESS  64
+struct file_descriptor_table {
+    struct vfs_file *files[MAX_FILES_PER_PROCESS];
+    uint32_t count;  /* 打开的文件数 */
+};
+
 /* 进程控制块（PCB） */
 struct process {
     /* 基本信息 */
@@ -68,11 +78,17 @@ struct process {
     /* CPU上下文 */
     struct cpu_context context;     /* 保存的寄存器 */
     
+    /* Linux风格：抢占计数 */
+    int preempt_count;              /* 0=可抢占, >0=禁止抢占 */
+    
     /* 内存管理 */
     struct page_directory *page_dir;  /* 页目录 */
     uint32_t kernel_stack;          /* 内核栈地址 */
     uint32_t kernel_stack_size;     /* 内核栈大小 */
     struct vma *vma_list;           /* 虚拟内存区域链表（用于按需分配） */
+    
+    /* 文件管理（Linux风格：每个进程独立的FD表）*/
+    struct file_descriptor_table *fd_table;  /* 文件描述符表 */
     
     /* 调度信息（基本） */
     uint32_t time_slice;            /* 时间片（tick数） */

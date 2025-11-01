@@ -59,15 +59,18 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/mm/pmm.c \
 	$(KERNEL_DIR)/mm/vmm.c \
 	$(KERNEL_DIR)/mm/kmalloc.c \
+	$(KERNEL_DIR)/mm/kmap.c \
 	$(KERNEL_DIR)/mm/mmap.c \
 	$(KERNEL_DIR)/mm/vma.c \
 	$(KERNEL_DIR)/process/process.c \
+	$(KERNEL_DIR)/process/fd_table.c \
 	$(KERNEL_DIR)/process/scheduler.c \
 	$(KERNEL_DIR)/process/priority_sched.c \
 	$(KERNEL_DIR)/process/mlfq_sched.c \
 	$(KERNEL_DIR)/process/fork.c \
 	$(KERNEL_DIR)/process/exec.c \
 	$(KERNEL_DIR)/fs/vfs_core.c \
+	$(KERNEL_DIR)/fs/vfs_buffer.c \
 	$(KERNEL_DIR)/fs/directory.c \
 	$(KERNEL_DIR)/fs/devfs.c \
 	$(KERNEL_DIR)/fs/dev_null.c \
@@ -281,6 +284,10 @@ $(BUILD_DIR)/kmalloc.o: $(KERNEL_DIR)/mm/kmalloc.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (kmalloc)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD_DIR)/kmap.o: $(KERNEL_DIR)/mm/kmap.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (kmap)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(BUILD_DIR)/mmap.o: $(KERNEL_DIR)/mm/mmap.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (mmap)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -292,6 +299,10 @@ $(BUILD_DIR)/vma.o: $(KERNEL_DIR)/mm/vma.c | $(BUILD_DIR)
 # 进程管理第5章新增的进程管理文件
 $(BUILD_DIR)/process.o: $(KERNEL_DIR)/process/process.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (Process Manager)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/fd_table.o: $(KERNEL_DIR)/process/fd_table.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (FD Table)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/scheduler.o: $(KERNEL_DIR)/process/scheduler.c | $(BUILD_DIR)
@@ -317,6 +328,10 @@ $(BUILD_DIR)/exec.o: $(KERNEL_DIR)/process/exec.c | $(BUILD_DIR)
 # 第7章新增的VFS和DevFS文件
 $(BUILD_DIR)/vfs_core.o: $(KERNEL_DIR)/fs/vfs_core.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (VFS Core)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/vfs_buffer.o: $(KERNEL_DIR)/fs/vfs_buffer.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (VFS Buffer)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/directory.o: $(KERNEL_DIR)/fs/directory.c | $(BUILD_DIR)

@@ -999,6 +999,14 @@ void kernel_main(void)
     uint32_t heap_size = 16 * 1024 * 1024;  // 16MB堆
     kmalloc_init(heap_start, heap_size);
     
+    /* 初始化kmap（高端内存临时映射）*/
+    extern void kmap_init(void);
+    kmap_init();
+    
+    /* 初始化VFS缓冲区池（避免Page Fault中的内存分配）*/
+    extern void vfs_buffer_init(void);
+    vfs_buffer_init();
+    
     #if 0  // 注释掉成功消息
     kprintf("[INIT] Memory Management initialized successfully!\n\n");
     #endif

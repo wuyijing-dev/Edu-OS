@@ -170,11 +170,17 @@ void *mmap_impl(void *addr, size_t length, int prot, int flags, int fd, off_t of
         new_vma->fd = fd;
         new_vma->file_offset = offset;
         if (is_device_mapping) {
-            /* 对于设备映射，private_data存储设备信息 */
-            /* 这里可以存储BGA的物理地址 */
+            /* Linux风格：设备映射 - 通过ioctl或设备驱动获取物理地址 */
             extern uint32_t bga_get_framebuffer_physical(void);
-            new_vma->private_data = (void*)bga_get_framebuffer_physical();
-            kprintf("[MMAP] Device VMA: phys=%p\n", new_vma->private_data);
+            uint32_t device_phys = bga_get_framebuffer_physical();
+            
+            if (device_phys) {
+                new_vma->private_data = (void*)device_phys;
+                kprintf("[MMAP] Device VMA: fd=%d, phys=0x%08x, size=%u\n", 
+                        fd, device_phys, length);
+            } else {
+                kprintf("[MMAP] Warning: Device physical address not available\n");
+            }
         }
     }
     

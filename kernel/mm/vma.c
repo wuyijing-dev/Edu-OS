@@ -142,11 +142,17 @@ int vma_handle_page_fault(struct vma *vma, uint32_t fault_addr,
     
     /* 初始化页面内容（根据VMA类型）*/
     void *page_ptr = NULL;
+    bool need_kunmap = false;
+    
     if (paddr < 0x400000) {
+        /* 低端内存：直接映射 */
         page_ptr = (void*)(paddr + 0xC0000000);
     } else {
-        /* TODO: 高端内存需要临时映射 */
-        kprintf("[VMA] Warning: High memory 0x%08x, skipping initialization\n", paddr);
+        /* 高端内存：使用kmap临时映射 */
+        extern void *kmap(uint32_t paddr);
+        page_ptr = kmap(paddr);
+        need_kunmap = true;
+        serial_write('H');  /* H = High memory */
     }
     
     if (page_ptr) {
@@ -233,6 +239,12 @@ int vma_handle_page_fault(struct vma *vma, uint32_t fault_addr,
     __asm__ volatile("invlpg (%0)" : : "r"(vaddr) : "memory");
     
     serial_write('D');
+    
+    /* 如果使用了kmap，需要解除映射 */
+    if (need_kunmap && page_ptr) {
+        extern void kunmap(void *vaddr);
+        kunmap(page_ptr);
+    }
     
     /* 调试输出（可选）*/
     #if 0

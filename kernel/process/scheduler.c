@@ -72,11 +72,49 @@ void scheduler_init(void)
 }
 
 /*
- * 调度器锁（用于异常处理期间禁止调度）
+ * 调度器锁（简单兼容版本，逐步迁移到preempt_count）
  * Linux风格：异常处理时设置此标志，防止在Page Fault期间发生上下文切换
- * 注意：全局变量，供exception.c使用
  */
 int scheduler_locked = 0;
+
+/*
+ * Linux风格：抢占控制
+ * 使用per-process的preempt_count，而不是全局锁
+ */
+static inline void preempt_disable(void)
+{
+    extern struct process *process_get_current(void);
+    struct process *proc = process_get_current();
+    if (proc) {
+        proc->preempt_count++;
+    }
+    scheduler_locked = 1;  /* 兼容旧代码 */
+}
+
+static inline void preempt_enable(void)
+{
+    extern struct process *process_get_current(void);
+    struct process *proc = process_get_current();
+    if (proc && proc->preempt_count > 0) {
+        proc->preempt_count--;
+    }
+    if (!proc || proc->preempt_count == 0) {
+        scheduler_locked = 0;  /* 兼容旧代码 */
+    }
+}
+
+static inline int preemptible(void)
+{
+    extern struct process *process_get_current(void);
+    struct process *proc = process_get_current();
+    
+    /* 如果没有当前进程（首次调度），总是可抢占 */
+    if (!proc) {
+        return 1;
+    }
+    
+    return proc->preempt_count == 0 && scheduler_locked == 0;
+}
 
 /*
  * 启用调度器
@@ -92,23 +130,19 @@ void scheduler_enable(void)
 }
 
 /*
- * 禁用调度器
- * 用于异常处理期间防止被打断
+ * 禁用调度器（兼容接口）
  */
 void scheduler_disable(void)
 {
-    scheduler_locked = 1;
-    /* 注意：不修改scheduler.enabled，只设置锁定标志 */
+    preempt_disable();
 }
 
 /*
- * 启用调度器（不立即调度）
- * 用于异常处理器恢复调度器状态
+ * 启用调度器（不立即调度，兼容接口）
  */
 void scheduler_enable_noschedule(void)
 {
-    scheduler_locked = 0;
-    /* 解除锁定，但不触发调度 */
+    preempt_enable();
 }
 
 /*
@@ -204,19 +238,13 @@ static struct process *scheduler_pick_next(void)
  */
 void scheduler_schedule(void)
 {
-    /* Linux风格：异常处理期间禁止调度 */
-    extern int scheduler_locked;
-    if (!scheduler.enabled || scheduler_locked) {
-        extern void serial_putc(uint16_t port, char c);
-        if (scheduler_locked) {
-            serial_putc(0x3F8, '[');
-            serial_putc(0x3F8, 'L');
-            serial_putc(0x3F8, 'O');
-            serial_putc(0x3F8, 'C');
-            serial_putc(0x3F8, 'K');
-            serial_putc(0x3F8, ']');
-            serial_putc(0x3F8, '\n');
-        }
+    /* Linux风格：检查调度器状态和抢占计数 */
+    if (!scheduler.enabled) {
+        return;
+    }
+    
+    /* 如果当前进程禁止抢占，不调度 */
+    if (!preemptible()) {
         return;
     }
     
@@ -329,9 +357,13 @@ void scheduler_yield(void)
  */
 void scheduler_tick(void)
 {
-    /* Linux风格：异常处理期间禁止调度 */
-    extern int scheduler_locked;
-    if (!scheduler.enabled || !scheduler.current || scheduler_locked) {
+    /* Linux风格：检查抢占计数 */
+    if (!scheduler.enabled || !scheduler.current) {
+        return;
+    }
+    
+    /* 如果当前进程禁止抢占，不调度 */
+    if (!preemptible()) {
         return;
     }
     

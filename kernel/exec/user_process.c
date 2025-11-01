@@ -432,8 +432,8 @@ pid_t create_user_process_lazy(const char *name, const char *elf_path)
 {
     kprintf("[USER_PROC_LAZY] Creating user process (Linux style): %s (ELF: %s)\n", name, elf_path);
     
-    /* Linux风格：先打开标准文件描述符，确保fd 0,1,2被占用
-     * 这样ELF文件会使用fd 3+，不会影响stdin/stdout/stderr
+    /* Linux风格：先打开标准文件描述符
+     * 确保stdin=0, stdout=1, stderr=2
      */
     extern int vfs_open(const char *path, int flags, int mode);
     
@@ -492,6 +492,8 @@ pid_t create_user_process_lazy(const char *name, const char *elf_path)
     proc->state = PROCESS_STATE_NEW;
     proc->priority = 120;  // 普通优先级
     proc->vma_list = NULL;
+    proc->fd_table = NULL;
+    proc->preempt_count = 0;  /* Linux风格：可抢占 */
     
     /* 5. 创建独立页表 */
     proc->page_dir = create_user_page_directory();

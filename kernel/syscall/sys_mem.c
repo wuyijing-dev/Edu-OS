@@ -148,29 +148,43 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
     /* 本地数组，从用户空间复制 */
     unsigned long args_copy[6];
     
-    /* 通过物理地址访问用户空间数组 */
+    /* Linux风格：通过copy_from_user安全访问用户空间 */
     if (proc && proc->page_dir && args_ptr >= 0x08000000 && args_ptr < 0xC0000000) {
         extern uint32_t vmm_virt_to_phys_in_directory(struct page_directory *pd, uint32_t virt);
         uint32_t args_phys = vmm_virt_to_phys_in_directory(proc->page_dir, args_ptr);
         
         kprintf("[SYS_MMAP] Args phys: 0x%08x\n", args_phys);
         
-        if (args_phys && args_phys < 0x400000) {
-            /* 通过直接映射访问物理内存 */
-            unsigned long *phys_ptr = (unsigned long*)(args_phys + 0xC0000000);
-            for (int i = 0; i < 6; i++) {
-                args_copy[i] = phys_ptr[i];
+        if (args_phys) {
+            /* 使用kmap（支持低端和高端内存统一接口）*/
+            extern void *kmap(uint32_t paddr);
+            extern void kunmap(void *vaddr);
+            
+            void *mapped_ptr = kmap(args_phys);
+            
+            if (mapped_ptr) {
+                /* 直接读取：mapped_ptr已经指向正确的物理页 */
+                unsigned long *args_array = (unsigned long*)mapped_ptr;
+                
+                /* 复制参数 */
+                for (int i = 0; i < 6; i++) {
+                    args_copy[i] = args_array[i];
+                }
+                
+                kunmap(mapped_ptr);
+                
+                kprintf("[SYS_MMAP] Decoded: addr=%p, len=%u, prot=0x%x, flags=0x%x, fd=%d, off=%u\n",
+                        (void*)args_copy[0], args_copy[1], args_copy[2], args_copy[3], 
+                        (int)args_copy[4], args_copy[5]);
+                
+                return mmap_impl((void*)args_copy[0], args_copy[1], args_copy[2], 
+                                args_copy[3], (int)args_copy[4], args_copy[5]);
+            } else {
+                kprintf("[SYS_MMAP] ERROR: kmap failed for 0x%08x\n", args_phys);
+                return (void*)-EFAULT;
             }
-            
-            kprintf("[SYS_MMAP] Decoded: addr=%p, len=%u, prot=0x%x, flags=0x%x, fd=%d, off=%u\n",
-                    (void*)args_copy[0], args_copy[1], args_copy[2], args_copy[3], 
-                    (int)args_copy[4], args_copy[5]);
-            
-            return mmap_impl((void*)args_copy[0], args_copy[1], args_copy[2], 
-                            args_copy[3], (int)args_copy[4], args_copy[5]);
         } else {
-            kprintf("[SYS_MMAP] ERROR: Cannot access args at 0x%08x (phys=0x%08x)\n", 
-                    args_ptr, args_phys);
+            kprintf("[SYS_MMAP] ERROR: Args not mapped at 0x%08x\n", args_ptr);
             return (void*)-EFAULT;
         }
     }
