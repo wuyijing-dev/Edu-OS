@@ -45,9 +45,20 @@
 #define SYS_fstat       108
 #define SYS_clone       120
 #define SYS_nanosleep   162
+#define SYS_gettid      186
+#define SYS_futex       240
+#define SYS_set_tid_address 258
+#define SYS_clock_nanosleep 267
+
+/* EduOS自定义系统调用（从300开始）*/
+#define SYS_thread_create   300
+#define SYS_thread_exit     301
+#define SYS_thread_join     302
+#define SYS_usleep          303
+#define SYS_msleep          304
 
 /* 最大系统调用号 */
-#define MAX_SYSCALLS    256
+#define MAX_SYSCALLS    512
 
 /* ========== 系统调用函数类型 ========== */
 

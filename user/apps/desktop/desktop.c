@@ -312,9 +312,9 @@ void _start(void)
     
     /* 打开鼠标设备 */
     printf("[Desktop] Opening /dev/mouse...\n");
-    desktop.mouse_fd = open("/dev/mouse", O_RDONLY);
+    desktop.mouse_fd = open("/mouse", O_RDONLY);
     if (desktop.mouse_fd < 0) {
-        printf("[Desktop] WARNING: Failed to open /dev/mouse (fd=%d)\n", desktop.mouse_fd);
+        printf("[Desktop] WARNING: Failed to open /mouse (fd=%d)\n", desktop.mouse_fd);
         printf("[Desktop] Mouse input will not be available\n");
     } else {
         printf("[Desktop] Mouse device opened (fd=%d)\n", desktop.mouse_fd);
