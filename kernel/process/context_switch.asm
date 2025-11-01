@@ -161,20 +161,7 @@ ret_from_fork:
     ; Linux风格：新进程首次运行的入口点
     ; 栈上已准备iret所需的5个值: EIP, CS, EFLAGS, ESP, SS
     
-    ; 调试：直接检查栈上第一个值（应该是EIP=0x08000000）
-    cmp dword [esp], 0x08000000
-    je .eip_ok
-    
-    ; EIP不对，输出'B'并停止
-    push eax
-    mov al, 'B'
-    mov dx, 0x3F8
-    out dx, al
-    pop eax
-    jmp $
-    
-.eip_ok:
-    ; EIP正确，输出'R'
+    ; 调试：输出'R'表示进入ret_from_fork
     push eax
     mov al, 'R'
     mov dx, 0x3F8
@@ -204,22 +191,28 @@ ret_from_fork:
     pop eax
     
     ; 临时测试：在iret前验证栈帧
-    ; 检查栈上的5个值是否正确
-    mov eax, [esp+0]    ; EIP
-    cmp eax, 0x08000000
-    jne .bad_stack
-    
+    ; 检查栈上的关键值是否正确
     mov eax, [esp+4]    ; CS
     cmp eax, 0x1B
-    jne .bad_stack
-    
-    mov eax, [esp+12]   ; ESP
-    cmp eax, 0x080ffffc
     jne .bad_stack
     
     mov eax, [esp+16]   ; SS
     cmp eax, 0x23
     jne .bad_stack
+    
+    ; 检查ESP是否在用户空间范围内（0x08000000 - 0xC0000000）
+    mov eax, [esp+12]   ; ESP
+    cmp eax, 0x08000000
+    jb .bad_stack       ; 如果 < 0x08000000，错误
+    cmp eax, 0xC0000000
+    jae .bad_stack      ; 如果 >= 0xC0000000，错误
+    
+    ; 检查EIP是否在用户空间范围内
+    mov eax, [esp+0]    ; EIP
+    cmp eax, 0x08000000
+    jb .bad_stack
+    cmp eax, 0xC0000000
+    jae .bad_stack
     
     ; 栈帧正确，输出'OK'
     push eax

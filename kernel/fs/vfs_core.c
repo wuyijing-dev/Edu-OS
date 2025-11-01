@@ -424,15 +424,81 @@ int vfs_read(int fd, char *buf, size_t count)
 /*
  * write系统调用
  */
-int vfs_write(int fd, const char *buf, size_t count)
+/*
+ * vfs_state_get_file - 从全局VFS状态获取文件指针（用于进程fd_table初始化）
+ */
+struct vfs_file *vfs_state_get_file(int fd)
 {
-    if (fd < 0 || fd >= VFS_MAX_OPEN_FILES || !buf) {
+    if (fd < 0 || fd >= VFS_MAX_OPEN_FILES) {
+        return NULL;
+    }
+    return vfs_state.open_files[fd];
+}
+
+/*
+ * vfs_open_file - 直接打开文件并返回vfs_file指针（用于进程fd_table）
+ */
+struct vfs_file *vfs_open_file(const char *path, int flags, int mode)
+{
+    /* 使用全局vfs_open打开文件，然后复制文件结构 */
+    int global_fd = vfs_open(path, flags, mode);
+    if (global_fd < 0) {
+        return NULL;
+    }
+    
+    /* 获取全局文件结构 */
+    struct vfs_file *global_file = vfs_state_get_file(global_fd);
+    if (!global_file) {
+        vfs_close(global_fd);
+        return NULL;
+    }
+    
+    /* 分配新的文件结构（每个进程独立） */
+    struct vfs_file *file = kmalloc(sizeof(struct vfs_file));
+    if (!file) {
+        vfs_close(global_fd);
+        return NULL;
+    }
+    
+    /* 复制文件结构 */
+    memcpy(file, global_file, sizeof(struct vfs_file));
+    
+    /* 关闭全局fd（我们已经复制了文件结构） */
+    vfs_close(global_fd);
+    
+    return file;
+}
+
+/*
+ * vfs_file_read - 直接通过vfs_file指针读取（用于进程fd_table）
+ */
+ssize_t vfs_file_read(struct vfs_file *file, void *buf, size_t count)
+{
+    if (!file || !buf) {
         return -EINVAL;
     }
     
-    struct vfs_file *file = vfs_state.open_files[fd];
-    if (!file) {
+    /* 检查权限 */
+    int access = file->flags & 3;
+    if (access != O_RDONLY && access != O_RDWR) {
         return -EBADF;
+    }
+    
+    /* 调用文件系统的read */
+    if (!file->f_op || !file->f_op->read) {
+        return -EINVAL;
+    }
+    
+    return file->f_op->read(file, buf, count);
+}
+
+/*
+ * vfs_file_write - 直接通过vfs_file指针写入（用于进程fd_table）
+ */
+ssize_t vfs_file_write(struct vfs_file *file, const void *buf, size_t count)
+{
+    if (!file || !buf) {
+        return -EINVAL;
     }
     
     /* 检查权限 - 提取访问模式位（低2位）*/
@@ -447,6 +513,20 @@ int vfs_write(int fd, const char *buf, size_t count)
     }
     
     return file->f_op->write(file, buf, count);
+}
+
+int vfs_write(int fd, const char *buf, size_t count)
+{
+    if (fd < 0 || fd >= VFS_MAX_OPEN_FILES || !buf) {
+        return -EINVAL;
+    }
+    
+    struct vfs_file *file = vfs_state.open_files[fd];
+    if (!file) {
+        return -EBADF;
+    }
+    
+    return vfs_file_write(file, buf, count);
 }
 
 /*

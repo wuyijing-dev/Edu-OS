@@ -137,6 +137,12 @@ void kernel_main(void)
     ret = rtl8139_init();
     if (ret == 0) {
         kprintf("[NET] ✓ RTL8139 network card initialized\n");
+        kprintf("[NET] Network Configuration:\n");
+        kprintf("[NET]   IP Address:  10.0.2.15\n");
+        kprintf("[NET]   Netmask:     255.255.255.0\n");
+        kprintf("[NET]   Gateway:     10.0.2.2\n");
+        kprintf("[NET]   Protocol:    IPv4, ARP, ICMP\n");
+        kprintf("[NET] ℹ️  Test with: ping 10.0.2.15 (from host)\n");
     } else {
         kprintf("[NET] RTL8139 network card not found (ret=%d)\n", ret);
     }
@@ -211,19 +217,31 @@ void kernel_main(void)
             /* 使用Linux风格的按需加载版本 */
             extern pid_t create_user_process_lazy(const char *name, const char *elf_path);
             
-            kprintf("      Loading /min.elf (Linux-style demand paging)...\n");
-            pid_t gui_pid = create_user_process_lazy("desktop", "/desktop.elf");
+            /* 加载网络测试程序 */
+            kprintf("      Loading /nettest.elf (Network Test Program)...\n");
+            pid_t nettest_pid = create_user_process_lazy("nettest", "/nettest.elf");
             
-            if (gui_pid > 0) {
-                kprintf("      ✅ GUI Demo loaded (PID %u)\n", gui_pid);
-                kprintf("      ✅ Fluent Design GUI will render on screen\n");
+            if (nettest_pid > 0) {
+                kprintf("      ✅ Network Test loaded (PID %u)\n", nettest_pid);
+            } else {
+                kprintf("      ⚠️  Failed to load nettest.elf\n");
+            }
+            
+            /* 加载桌面程序 */
+            kprintf("      Loading /desktop.elf (GUI Desktop)...\n");
+            pid_t desktop_pid = create_user_process_lazy("desktop", "/desktop.elf");
+            
+            if (desktop_pid > 0) {
+                kprintf("      ✅ Desktop loaded (PID %u)\n", desktop_pid);
                 kprintf("\n");
                 kprintf("╔════════════════════════════════════════════════════════════╗\n");
-                kprintf("║           EduOS Desktop - Ready to Launch!               ║\n");
+                kprintf("║           EduOS - Ready to Launch!                       ║\n");
+                kprintf("║  Programs: nettest (PID %u), desktop (PID %u)            ║\n", nettest_pid, desktop_pid);
+                kprintf("║  Test with: ping 10.0.2.15 (from host)                  ║\n");
                 kprintf("╚════════════════════════════════════════════════════════════╝\n");
                 kprintf("\n");
                 
-                /* 启动调度器执行GUI程序 */
+                /* 启动调度器执行用户程序 */
                 kprintf("[Scheduler] Starting multitasking...\n");
                 kprintf("      Enabling interrupts and scheduler...\n");
                 
@@ -240,7 +258,6 @@ void kernel_main(void)
                 asm volatile("cli");
                 
                 /* 主动进行第一次调度（不会返回） */
-                /* 注意：context_switch会在切换到用户态时启用中断（EFLAGS.IF=1） */
                 scheduler_schedule();
                 
                 /* 永远不应该到达这里 */
@@ -249,8 +266,8 @@ void kernel_main(void)
                     asm volatile("hlt");
                 }
             } else {
-                kprintf("      ❌ Failed to load min.elf (PID: %d)\n", gui_pid);
-                kprintf("      ℹ️  Make sure min.elf is in the FAT32 disk\n");
+                kprintf("      ❌ Failed to load desktop.elf (PID: %d)\n", desktop_pid);
+                kprintf("      ℹ️  Make sure desktop.elf is in the FAT32 disk\n");
             }
         } else {
             kprintf("      ⚠️  No FAT32 disk mounted\n");

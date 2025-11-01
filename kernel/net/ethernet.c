@@ -7,12 +7,17 @@
 #include <net/ip.h>
 #include <string.h>
 
+/* 外部网络统计计数器 */
+extern volatile uint32_t eth_packet_count;
+
 /*
  * 解析以太网帧类型
  */
 int eth_type_trans(struct sk_buff *skb)
 {
     struct ethhdr *eth = (struct ethhdr *)skb->data;
+    
+    eth_packet_count++;  /* 统计以太网包 */
     
     /* 保存协议类型 */
     skb->protocol = ntohs(eth->h_proto);
@@ -38,6 +43,7 @@ int eth_type_trans(struct sk_buff *skb)
 int eth_header(struct sk_buff *skb, struct net_device *dev,
                uint16_t type, const void *daddr, const void *saddr, uint32_t len)
 {
+    (void)len;  /* 未来可能用于MTU检查 */
     struct ethhdr *eth = (struct ethhdr *)skb_push(skb, sizeof(struct ethhdr));
     
     /* 设置协议类型 */

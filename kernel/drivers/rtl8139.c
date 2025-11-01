@@ -286,31 +286,39 @@ static int rtl8139_probe(struct pci_device *pdev)
  */
 int rtl8139_init(void)
 {
-    /* 扫描PCI总线查找RTL8139设备 */
-    for (uint16_t bus = 0; bus < 256; bus++) {
-        for (uint8_t device = 0; device < 32; device++) {
-            for (uint8_t function = 0; function < 8; function++) {
-                uint16_t vendor = pci_read_config(bus, device, function, 0x00);
-                if (vendor == 0xFFFF) {
-                    continue;
-                }
-                
-                uint16_t device_id = pci_read_config(bus, device, function, 0x02);
-                
-                if (vendor == RTL8139_VENDOR_ID && device_id == RTL8139_DEVICE_ID) {
-                    struct pci_device pdev = {
-                        .bus = bus,
-                        .device = device,
-                        .function = function,
-                        .vendor_id = vendor,
-                        .device_id = device_id
-                    };
-                    return rtl8139_probe(&pdev);
-                }
+    extern void kprintf(const char *fmt, ...);
+    
+    kprintf("[RTL8139] Scanning PCI bus for RTL8139 (vendor=0x%x, device=0x%x)...\n", 
+            RTL8139_VENDOR_ID, RTL8139_DEVICE_ID);
+    
+    /* 扫描PCI总线查找RTL8139设备 (只扫描总线0) */
+    for (uint8_t device = 0; device < 32; device++) {
+        for (uint8_t function = 0; function < 8; function++) {
+            uint16_t vendor = pci_read_config(0, device, function, 0x00) & 0xFFFF;
+            if (vendor == 0xFFFF || vendor == 0x0000) {
+                continue;
+            }
+            
+            uint16_t device_id = (pci_read_config(0, device, function, 0x00) >> 16) & 0xFFFF;
+            
+            kprintf("[RTL8139] Found PCI device: bus=0, dev=%d, func=%d, vendor=0x%04x, device=0x%04x\n",
+                    device, function, vendor, device_id);
+            
+            if (vendor == RTL8139_VENDOR_ID && device_id == RTL8139_DEVICE_ID) {
+                kprintf("[RTL8139] ✓ Found RTL8139 network card!\n");
+                struct pci_device pdev = {
+                    .bus = 0,
+                    .device = device,
+                    .function = function,
+                    .vendor_id = vendor,
+                    .device_id = device_id
+                };
+                return rtl8139_probe(&pdev);
             }
         }
     }
     
+    kprintf("[RTL8139] No RTL8139 found on PCI bus\n");
     return -1;
 }
 

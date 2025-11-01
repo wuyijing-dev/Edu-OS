@@ -6,6 +6,8 @@
 #include <kernel.h>
 #include <fs/vfs.h>
 #include <string.h>
+#include <process/process.h>
+#include <process/scheduler.h>
 
 /*
  * sys_read - 从文件描述符读取数据
@@ -52,8 +54,25 @@ int sys_write(int fd, const char *buf, size_t count)
     }
     #endif
     
-    /* 调用 VFS */
-    return vfs_write(fd, buf, count);
+    /* 获取当前进程的fd_table */
+    extern struct process *scheduler_get_current(void);
+    struct process *current = scheduler_get_current();
+    
+    if (!current || !current->fd_table) {
+        /* 如果没有进程上下文或fd_table，回退到全局VFS */
+        return vfs_write(fd, buf, count);
+    }
+    
+    /* 从进程的fd_table获取文件 */
+    if (fd >= MAX_FILES_PER_PROCESS || !current->fd_table->files[fd]) {
+        return -EBADF;  /* Bad file descriptor */
+    }
+    
+    struct vfs_file *file = current->fd_table->files[fd];
+    
+    /* 调用VFS写入 */
+    extern ssize_t vfs_file_write(struct vfs_file *file, const void *buf, size_t count);
+    return vfs_file_write(file, buf, count);
 }
 
 /*

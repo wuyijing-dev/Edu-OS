@@ -90,7 +90,7 @@ pid_t create_user_process(const char *name, const char *elf_path)
     /* 2. 读取ELF头 */
     Elf32_Ehdr ehdr;
     if (vfs_read(fd, (char*)&ehdr, sizeof(ehdr)) != sizeof(ehdr)) {
-        vfs_close(fd);
+        /* fd now managed by process fd_table */
         return -1;
     }
     
@@ -98,14 +98,14 @@ pid_t create_user_process(const char *name, const char *elf_path)
     if (ehdr.e_ident[EI_MAG0] != 0x7F || ehdr.e_ident[EI_MAG1] != 'E' ||
         ehdr.e_ident[EI_MAG2] != 'L' || ehdr.e_ident[EI_MAG3] != 'F') {
         kprintf("[USER_PROC] Not an ELF file\n");
-        vfs_close(fd);
+        /* fd now managed by process fd_table */
         return -1;
     }
     
     /* 4. 创建进程控制块 */
     struct process *proc = (struct process*)kmalloc(sizeof(struct process));
     if (!proc) {
-        vfs_close(fd);
+        /* fd now managed by process fd_table */
         return -1;
     }
     
@@ -120,7 +120,7 @@ pid_t create_user_process(const char *name, const char *elf_path)
     proc->page_dir = create_user_page_directory();
     if (!proc->page_dir) {
         kfree(proc);
-        vfs_close(fd);
+        /* fd now managed by process fd_table */
         return -1;
     }
     
@@ -133,7 +133,7 @@ pid_t create_user_process(const char *name, const char *elf_path)
     if (!kernel_stack_base) {
         vmm_destroy_page_directory(proc->page_dir);
         kfree(proc);
-        vfs_close(fd);
+        /* fd now managed by process fd_table */
         return -1;
     }
     
@@ -151,7 +151,7 @@ pid_t create_user_process(const char *name, const char *elf_path)
     if (!phdrs) {
         vmm_destroy_page_directory(proc->page_dir);
         kfree(proc);
-        vfs_close(fd);
+        /* fd now managed by process fd_table */
         return -1;
     }
     
@@ -206,7 +206,7 @@ pid_t create_user_process(const char *name, const char *elf_path)
                 kfree(phdrs);
                 vmm_destroy_page_directory(proc->page_dir);
                 kfree(proc);
-                vfs_close(fd);
+                /* fd now managed by process fd_table */
                 return -1;
             }
             
@@ -296,7 +296,7 @@ pid_t create_user_process(const char *name, const char *elf_path)
         if (!paddr) {
             kprintf("[USER_PROC] Failed to allocate stack page\n");
             kfree(phdrs);
-            vfs_close(fd);
+            /* fd now managed by process fd_table */
             return -1;
         }
         
@@ -432,57 +432,9 @@ pid_t create_user_process_lazy(const char *name, const char *elf_path)
 {
     kprintf("[USER_PROC_LAZY] Creating user process (Linux style): %s (ELF: %s)\n", name, elf_path);
     
-    /* Linux风格：先打开标准文件描述符
-     * 确保stdin=0, stdout=1, stderr=2
-     */
-    extern int vfs_open(const char *path, int flags, int mode);
-    
-    kprintf("[USER_PROC_LAZY] Pre-opening standard file descriptors...\n");
-    int stdio_fd0 = vfs_open("/console", O_RDWR, 0);
-    int stdio_fd1 = vfs_open("/console", O_RDWR, 0);
-    int stdio_fd2 = vfs_open("/console", O_RDWR, 0);
-    
-    kprintf("[USER_PROC_LAZY] Pre-opened: fd0=%d, fd1=%d, fd2=%d\n", 
-            stdio_fd0, stdio_fd1, stdio_fd2);
-    
-    if (stdio_fd0 != 0 || stdio_fd1 != 1 || stdio_fd2 != 2) {
-        kprintf("[USER_PROC_LAZY] ERROR: Could not allocate standard fds!\n");
-        return -1;
-    }
-    
-    /* 1. 打开ELF文件 (现在会得到fd >= 3) */
-    int fd = vfs_open(elf_path, O_RDONLY, 0);
-    if (fd < 0) {
-        kprintf("[USER_PROC_LAZY] Failed to open ELF file: %d\n", fd);
-        /* 清理已打开的stdio */
-        extern int vfs_close(int fd);
-        vfs_close(stdio_fd0);
-        vfs_close(stdio_fd1);
-        vfs_close(stdio_fd2);
-        return -1;
-    }
-    
-    kprintf("[USER_PROC_LAZY] Opened ELF file: %s (fd=%d)\n", elf_path, fd);
-    
-    /* 2. 读取ELF头 */
-    Elf32_Ehdr ehdr;
-    if (vfs_read(fd, (char*)&ehdr, sizeof(ehdr)) != sizeof(ehdr)) {
-        vfs_close(fd);
-        return -1;
-    }
-    
-    /* 3. 验证ELF */
-    if (ehdr.e_ident[EI_MAG0] != 0x7F || ehdr.e_ident[EI_MAG1] != 'E' ||
-        ehdr.e_ident[EI_MAG2] != 'L' || ehdr.e_ident[EI_MAG3] != 'F') {
-        kprintf("[USER_PROC_LAZY] Not an ELF file\n");
-        vfs_close(fd);
-        return -1;
-    }
-    
-    /* 4. 创建进程控制块 */
+    /* 1. 先创建进程控制块 */
     struct process *proc = (struct process*)kmalloc(sizeof(struct process));
     if (!proc) {
-        vfs_close(fd);
         return -1;
     }
     
@@ -492,14 +444,71 @@ pid_t create_user_process_lazy(const char *name, const char *elf_path)
     proc->state = PROCESS_STATE_NEW;
     proc->priority = 120;  // 普通优先级
     proc->vma_list = NULL;
-    proc->fd_table = NULL;
+    
+    /* 2. 创建进程独立的文件描述符表 */
+    extern struct file_descriptor_table *fd_table_create(void);
+    proc->fd_table = fd_table_create();
+    if (!proc->fd_table) {
+        kprintf("[USER_PROC_LAZY] Failed to create fd_table!\n");
+        kfree(proc);
+        return -1;
+    }
+    
+    /* 3. 在进程的fd_table中打开标准文件描述符 */
+    kprintf("[USER_PROC_LAZY] Opening standard file descriptors in process fd_table...\n");
+    
+    extern struct vfs_file *vfs_open_file(const char *path, int flags, int mode);
+    proc->fd_table->files[0] = vfs_open_file("/console", O_RDWR, 0);
+    proc->fd_table->files[1] = vfs_open_file("/console", O_RDWR, 0);
+    proc->fd_table->files[2] = vfs_open_file("/console", O_RDWR, 0);
+    
+    if (!proc->fd_table->files[0] || !proc->fd_table->files[1] || !proc->fd_table->files[2]) {
+        kprintf("[USER_PROC_LAZY] Failed to open standard fds!\n");
+        kfree(proc->fd_table);
+        kfree(proc);
+        return -1;
+    }
+    
+    kprintf("[USER_PROC_LAZY] Standard fds opened: stdin=0, stdout=1, stderr=2\n");
+    
+    /* 4. 打开ELF文件 */
+    proc->fd_table->files[3] = vfs_open_file(elf_path, O_RDONLY, 0);
+    if (!proc->fd_table->files[3]) {
+        kprintf("[USER_PROC_LAZY] Failed to open ELF file: %s\n", elf_path);
+        kfree(proc->fd_table);
+        kfree(proc);
+        return -1;
+    }
+    
+    proc->fd_table->count = 4;
+    kprintf("[USER_PROC_LAZY] Opened ELF file: %s (process fd=3)\n", elf_path);
+    
+    /* 5. 读取ELF头 */
+    Elf32_Ehdr ehdr;
+    extern ssize_t vfs_file_read(struct vfs_file *file, void *buf, size_t count);
+    if (vfs_file_read(proc->fd_table->files[3], (char*)&ehdr, sizeof(ehdr)) != sizeof(ehdr)) {
+        kprintf("[USER_PROC_LAZY] Failed to read ELF header\n");
+        kfree(proc->fd_table);
+        kfree(proc);
+        return -1;
+    }
+    
+    /* 6. 验证ELF */
+    if (ehdr.e_ident[EI_MAG0] != 0x7F || ehdr.e_ident[EI_MAG1] != 'E' ||
+        ehdr.e_ident[EI_MAG2] != 'L' || ehdr.e_ident[EI_MAG3] != 'F') {
+        kprintf("[USER_PROC_LAZY] Not an ELF file\n");
+        kfree(proc->fd_table);
+        kfree(proc);
+        return -1;
+    }
+    
     proc->preempt_count = 0;  /* Linux风格：可抢占 */
     
-    /* 5. 创建独立页表 */
+    /* 7. 创建独立页表 */
     proc->page_dir = create_user_page_directory();
     if (!proc->page_dir) {
+        kfree(proc->fd_table);
         kfree(proc);
-        vfs_close(fd);
         return -1;
     }
     
@@ -509,7 +518,7 @@ pid_t create_user_process_lazy(const char *name, const char *elf_path)
     if (!kernel_stack_base) {
         vmm_destroy_page_directory(proc->page_dir);
         kfree(proc);
-        vfs_close(fd);
+        /* fd now managed by process fd_table */
         return -1;
     }
     proc->kernel_stack = (uint32_t)kernel_stack_base + proc->kernel_stack_size - 4;
@@ -523,12 +532,12 @@ pid_t create_user_process_lazy(const char *name, const char *elf_path)
     if (!phdrs) {
         vmm_destroy_page_directory(proc->page_dir);
         kfree(kernel_stack_base);
+        kfree(proc->fd_table);
         kfree(proc);
-        vfs_close(fd);
         return -1;
     }
     
-    vfs_read(fd, (char*)phdrs, sizeof(Elf32_Phdr) * ehdr.e_phnum);
+    vfs_file_read(proc->fd_table->files[3], (char*)phdrs, sizeof(Elf32_Phdr) * ehdr.e_phnum);
     
     kprintf("[USER_PROC_LAZY] Creating VMAs for ELF segments (demand paging)...\n");
     
@@ -566,7 +575,7 @@ pid_t create_user_process_lazy(const char *name, const char *elf_path)
             
             struct vma *vma = vma_create(vaddr_start, filesz_end, vma_flags);
             if (vma) {
-                vma->fd = fd;
+                vma->fd = 3;  /* ELF文件在进程fd_table中的索引 */
                 
                 /* Linux风格文件偏移计算：
                  * 公式：file_offset = p_offset - (p_vaddr % PAGE_SIZE)
@@ -660,7 +669,8 @@ pid_t create_user_process_lazy(const char *name, const char *elf_path)
     extern void ret_from_fork(void);
     proc->context.eip = (uint32_t)ret_from_fork;
     
-    uint32_t user_esp = user_stack_top - 4;
+    /* 用户栈指针：留出一些空间给启动代码使用 */
+    uint32_t user_esp = user_stack_top - 64;  /* 0x080FFFC0 */
     
     /* 准备iret栈帧 */
     uint32_t *kstack = (uint32_t*)proc->kernel_stack;
@@ -694,7 +704,7 @@ pid_t create_user_process_lazy(const char *name, const char *elf_path)
      * 标准文件描述符 0,1,2 已在函数开始时打开
      */
     kprintf("[USER_PROC_LAZY] Entry point: 0x%08x (will load on first page fault)\n", ehdr.e_entry);
-    kprintf("[USER_PROC_LAZY] ELF fd=%d will be used for demand paging\n", fd);
+    kprintf("[USER_PROC_LAZY] ELF fd=3 will be used for demand paging\n");
     kprintf("[USER_PROC_LAZY] Standard I/O: stdin=0, stdout=1, stderr=2 (already opened)\n");
     
     /* 验证入口点页面是否未映射（应该通过Page Fault加载） */
@@ -747,7 +757,7 @@ int do_exec(const char *path, char *argv[], char *envp[])
     Elf32_Ehdr ehdr;
     if (vfs_read(fd, (char*)&ehdr, sizeof(ehdr)) != sizeof(ehdr)) {
         kprintf("[EXECVE] ERROR: Failed to read ELF header\n");
-        vfs_close(fd);
+        /* fd now managed by process fd_table */
         return -EIO;
     }
     
@@ -755,7 +765,7 @@ int do_exec(const char *path, char *argv[], char *envp[])
     if (ehdr.e_ident[EI_MAG0] != 0x7F || ehdr.e_ident[EI_MAG1] != 'E' ||
         ehdr.e_ident[EI_MAG2] != 'L' || ehdr.e_ident[EI_MAG3] != 'F') {
         kprintf("[EXECVE] ERROR: Not a valid ELF file\n");
-        vfs_close(fd);
+        /* fd now managed by process fd_table */
         return -EINVAL;
     }
     
@@ -791,7 +801,7 @@ int do_exec(const char *path, char *argv[], char *envp[])
     /* 4. 读取程序头表 */
     Elf32_Phdr *phdrs = kmalloc(sizeof(Elf32_Phdr) * ehdr.e_phnum);
     if (!phdrs) {
-        vfs_close(fd);
+        /* fd now managed by process fd_table */
         return -ENOMEM;
     }
     
@@ -917,3 +927,4 @@ int do_exec(const char *path, char *argv[], char *envp[])
     /* 不会返回 */
     return 0;
 }
+

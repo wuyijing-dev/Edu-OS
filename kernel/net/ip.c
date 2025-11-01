@@ -19,6 +19,21 @@ struct arp_entry {
 
 static struct arp_entry arp_cache[ARP_CACHE_SIZE];
 
+/* 网络统计计数器（全局，供其他模块访问）*/
+volatile uint32_t icmp_echo_request_count = 0;
+volatile uint32_t icmp_echo_reply_count = 0;
+volatile uint32_t ip_packet_count = 0;
+volatile uint32_t eth_packet_count = 0;
+
+/* 获取网络统计信息 */
+void net_get_stats(uint32_t *icmp_req, uint32_t *icmp_reply, uint32_t *ip_pkts, uint32_t *eth_pkts)
+{
+    if (icmp_req) *icmp_req = icmp_echo_request_count;
+    if (icmp_reply) *icmp_reply = icmp_echo_reply_count;
+    if (ip_pkts) *ip_pkts = ip_packet_count;
+    if (eth_pkts) *eth_pkts = eth_packet_count;
+}
+
 /*
  * 计算IP校验和
  */
@@ -49,6 +64,8 @@ uint16_t ip_checksum(const void *data, uint32_t len)
 int ip_rcv(struct sk_buff *skb)
 {
     struct iphdr *iph = (struct iphdr *)skb->data;
+    
+    ip_packet_count++;  /* 统计IP包 */
     
     /* 验证版本 */
     if ((iph->version_ihl >> 4) != 4) {
@@ -247,6 +264,7 @@ int icmp_rcv(struct sk_buff *skb)
     
     /* 处理Echo Request */
     if (icmph->type == ICMP_ECHO) {
+        icmp_echo_request_count++;  /* 统计Echo Request */
         return icmp_send_echo_reply(skb);
     }
     
@@ -275,6 +293,8 @@ int icmp_send_echo_reply(struct sk_buff *skb)
     /* 重新计算IP校验和 */
     iph->check = 0;
     iph->check = ip_checksum(iph, sizeof(struct iphdr));
+    
+    icmp_echo_reply_count++;  /* 统计Echo Reply */
     
     /* 发送 */
     return ip_send(skb, ntohl(iph->daddr), IPPROTO_ICMP);

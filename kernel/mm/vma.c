@@ -9,6 +9,8 @@
 #include <kernel.h>
 #include <string.h>
 #include <serial.h>
+#include <process/process.h>
+#include <fs/vfs.h>
 
 /*
  * 创建新的 VMA
@@ -164,32 +166,50 @@ int vma_handle_page_fault(struct vma *vma, uint32_t fault_addr,
             serial_write('F');
             /* 文件映射：从文件读取数据 */
             if (vma->fd >= 0) {
-                extern int vfs_lseek(int fd, int offset, int whence);
-                extern int vfs_read(int fd, char *buf, int count);
+                /* 获取当前进程的fd_table */
+                extern struct process *process_get_current(void);
+                struct process *proc = process_get_current();
                 
-                /* 计算文件偏移 */
-                uint32_t offset_in_vma = vaddr - vma->start;
-                uint32_t file_offset = vma->file_offset + offset_in_vma;
-                
-                /* 关闭中断，避免在VFS操作中被打断 */
-                asm volatile("cli");
-                
-                serial_write('S');
-                int seek_result = vfs_lseek(vma->fd, file_offset, 0);
-                if (seek_result >= 0) {
-                    serial_write('R');
-                    int bytes_read = vfs_read(vma->fd, (char*)page_ptr, 4096);
+                if (proc && proc->fd_table && vma->fd < MAX_FILES_PER_PROCESS) {
+                    struct vfs_file *file = proc->fd_table->files[vma->fd];
                     
-                    if (bytes_read < 0) {
-                        serial_write('E');
+                    if (file) {
+                        /* 计算文件偏移 */
+                        uint32_t offset_in_vma = vaddr - vma->start;
+                        uint32_t file_offset = vma->file_offset + offset_in_vma;
+                        
+                        /* 关闭中断，避免在VFS操作中被打断 */
+                        asm volatile("cli");
+                        
+                        serial_write('S');
+                        
+                        /* 保存当前文件位置 */
+                        uint32_t old_pos = file->pos;
+                        
+                        /* 设置文件位置 */
+                        file->pos = file_offset;
+                        
+                        /* 使用vfs_file_read读取 */
+                        extern ssize_t vfs_file_read(struct vfs_file *file, void *buf, size_t count);
+                        serial_write('R');
+                        int bytes_read = vfs_file_read(file, (char*)page_ptr, 4096);
+                        
+                        /* 恢复文件位置 */
+                        file->pos = old_pos;
+                        
+                        if (bytes_read < 0) {
+                            serial_write('E');
+                        } else {
+                            serial_write('K');
+                        }
+                        
+                        /* 恢复中断（会在iret时自动恢复） */
                     } else {
-                        serial_write('K');
+                        serial_write('N');  /* No file */
                     }
                 } else {
-                    serial_write('X');
+                    serial_write('P');  /* No process or fd_table */
                 }
-                
-                /* 恢复中断（会在iret时自动恢复） */
             }
         } else if (vma->private_data) {
             /* 设备映射：直接使用物理地址（如BGA framebuffer）
