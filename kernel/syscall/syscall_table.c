@@ -7,6 +7,8 @@
 #include <syscall.h>
 #include <types.h>
 #include <signal.h>
+#include <sys/stat.h>
+#include <sys/time.h>
 
 /* 外部系统调用函数声明 */
 
@@ -31,8 +33,15 @@ extern int sys_dup2(int oldfd, int newfd);
 extern int sys_pipe(int pipefd[2]);
 extern int sys_fcntl(int fd, int cmd, unsigned long arg);
 
+/* 文件状态（POSIX） */
+extern int sys_stat(const char *path, struct stat *buf);
+extern int sys_fstat(int fd, struct stat *buf);
+extern int sys_lstat(const char *path, struct stat *buf);
+
 /* 时间 */
 extern int sys_time(uint32_t *tloc);
+extern int sys_gettimeofday(struct timeval *tv, struct timezone *tz);
+extern int sys_nanosleep(const struct timespec *req, struct timespec *rem);
 
 /* 文件I/O */
 extern int sys_read(int fd, char *buf, size_t count);
@@ -79,6 +88,7 @@ syscall_func_t syscall_table[MAX_SYSCALLS] = {
     [SYS_getpid]    = (syscall_func_t)sys_getpid,     /* 20 */
     [SYS_pause]     = (syscall_func_t)sys_pause,      /* 29 - POSIX暂停 */
     [SYS_kill]      = (syscall_func_t)sys_kill,       /* 37 - POSIX信号发送 */
+    [SYS_gettimeofday] = (syscall_func_t)sys_gettimeofday, /* 78 - POSIX时间 */
     [SYS_mkdir]     = (syscall_func_t)sys_mkdir,      /* 39 */
     [SYS_rmdir]     = (syscall_func_t)sys_rmdir,      /* 40 */
     [SYS_dup]       = (syscall_func_t)sys_dup,        /* 41 - POSIX dup */
@@ -91,6 +101,10 @@ syscall_func_t syscall_table[MAX_SYSCALLS] = {
     [SYS_sigaction] = (syscall_func_t)sys_sigaction,  /* 67 - POSIX信号动作 */
     [SYS_mmap]      = (syscall_func_t)sys_mmap,       /* 90 */
     [SYS_munmap]    = (syscall_func_t)sys_munmap,     /* 91 */
+    [SYS_stat]      = (syscall_func_t)sys_stat,       /* 106 - POSIX stat */
+    [SYS_lstat]     = (syscall_func_t)sys_lstat,      /* 107 - POSIX lstat */
+    [SYS_fstat]     = (syscall_func_t)sys_fstat,      /* 108 - POSIX fstat */
     [SYS_sigprocmask] = (syscall_func_t)sys_sigprocmask, /* 126 - POSIX信号掩码 */
+    [SYS_nanosleep] = (syscall_func_t)sys_nanosleep,  /* 162 - POSIX sleep */
 };
 

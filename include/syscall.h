@@ -46,7 +46,10 @@
 #define SYS_mmap        90
 #define SYS_munmap      91
 #define SYS_fstat       108
+#define SYS_stat        106  /* POSIX stat() */
+#define SYS_lstat       107  /* POSIX lstat() */
 #define SYS_clone       120
+#define SYS_gettimeofday 78  /* POSIX gettimeofday() */
 #define SYS_nanosleep   162
 #define SYS_gettid      186
 #define SYS_futex       240

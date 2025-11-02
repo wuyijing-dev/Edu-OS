@@ -24,6 +24,14 @@ typedef uint32_t mode_t;     /* 文件权限模式 */
 typedef uint32_t pid_t;      /* 进程 ID */
 typedef uint32_t uid_t;      /* 用户 ID */
 typedef uint32_t gid_t;      /* 组 ID */
+typedef uint32_t dev_t;      /* 设备号 */
+typedef uint32_t ino_t;      /* inode号 */
+typedef uint32_t nlink_t;    /* 硬链接数 */
+typedef int32_t  blksize_t;  /* 块大小 */
+typedef int32_t  blkcnt_t;   /* 块数量 */
+typedef uint32_t time_t;     /* 时间（秒）*/
+typedef int32_t  suseconds_t;/* 微秒 */
+typedef int32_t  clockid_t;  /* 时钟ID */
 
 /* 布尔类型 */
 typedef int bool;
