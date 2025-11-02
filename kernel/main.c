@@ -101,6 +101,14 @@ void kernel_main(void)
     extern void oom_init(void);
     oom_init();
     
+    /* 初始化页面缓存（Page Cache）*/
+    extern void page_cache_init(void);
+    page_cache_init();
+    
+    /* 初始化SWAP系统 */
+    extern int swap_init(void);
+    swap_init();
+    
     /* 初始化VFS缓冲区池（避免Page Fault中的内存分配）*/
     extern void vfs_buffer_init(void);
     vfs_buffer_init();

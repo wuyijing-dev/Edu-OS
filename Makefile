@@ -67,6 +67,8 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/mm/uaccess.c \
 	$(KERNEL_DIR)/mm/page_reclaim.c \
 	$(KERNEL_DIR)/mm/oom.c \
+	$(KERNEL_DIR)/mm/page_cache.c \
+	$(KERNEL_DIR)/mm/swap.c \
 	$(KERNEL_DIR)/process/process.c \
 	$(KERNEL_DIR)/process/fd_table.c \
 	$(KERNEL_DIR)/process/scheduler.c \
@@ -338,6 +340,14 @@ $(BUILD_DIR)/uaccess.o: $(KERNEL_DIR)/mm/uaccess.c | $(BUILD_DIR)
 
 $(BUILD_DIR)/page_reclaim.o: $(KERNEL_DIR)/mm/page_reclaim.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (Page Reclaim/LRU)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/page_cache.o: $(KERNEL_DIR)/mm/page_cache.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (Page Cache)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/swap.o: $(KERNEL_DIR)/mm/swap.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (SWAP)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/oom.o: $(KERNEL_DIR)/mm/oom.c | $(BUILD_DIR)

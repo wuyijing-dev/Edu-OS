@@ -255,5 +255,14 @@ static inline void list_splice(const struct list_head *list,
          &pos->member != (head); \
          pos = list_entry(pos->member.prev, typeof(*pos), member))
 
+/**
+ * 安全反向遍历链表中的每个元素
+ */
+#define list_for_each_entry_safe_reverse(pos, n, head, member) \
+    for (pos = list_last_entry(head, typeof(*pos), member), \
+         n = list_entry(pos->member.prev, typeof(*pos), member); \
+         &pos->member != (head); \
+         pos = n, n = list_entry(n->member.prev, typeof(*n), member))
+
 #endif /* _LIST_H */
 
