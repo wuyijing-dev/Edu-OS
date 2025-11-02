@@ -43,5 +43,10 @@ typedef int bool;
 #define NULL ((void*)0)
 #endif
 
+/* offsetof宏 - 获取结构体成员的偏移量 */
+#ifndef offsetof
+#define offsetof(TYPE, MEMBER) ((size_t) &((TYPE *)0)->MEMBER)
+#endif
+
 #endif /* _TYPES_H */
 

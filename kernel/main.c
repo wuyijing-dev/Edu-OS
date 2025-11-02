@@ -93,6 +93,14 @@ void kernel_main(void)
     extern void kmap_init(void);
     kmap_init();
     
+    /* 初始化页面回收系统（LRU）*/
+    extern void page_reclaim_init(void);
+    page_reclaim_init();
+    
+    /* 初始化OOM killer */
+    extern void oom_init(void);
+    oom_init();
+    
     /* 初始化VFS缓冲区池（避免Page Fault中的内存分配）*/
     extern void vfs_buffer_init(void);
     vfs_buffer_init();

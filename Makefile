@@ -65,6 +65,8 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/mm/mmap.c \
 	$(KERNEL_DIR)/mm/vma.c \
 	$(KERNEL_DIR)/mm/uaccess.c \
+	$(KERNEL_DIR)/mm/page_reclaim.c \
+	$(KERNEL_DIR)/mm/oom.c \
 	$(KERNEL_DIR)/process/process.c \
 	$(KERNEL_DIR)/process/fd_table.c \
 	$(KERNEL_DIR)/process/scheduler.c \
@@ -106,6 +108,7 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/syscall/sys_ioctl.c \
 	$(KERNEL_DIR)/syscall/sys_select.c \
 	$(KERNEL_DIR)/syscall/sys_shm.c \
+	$(KERNEL_DIR)/syscall/sys_mlock.c \
 	$(KERNEL_DIR)/ipc/pipe.c \
 	$(KERNEL_DIR)/ipc/shm.c \
 	$(KERNEL_DIR)/input/input_core.c \
@@ -122,7 +125,8 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/sync/semaphore.c \
 	$(KERNEL_DIR)/sync/spinlock.c \
 	$(LIB_DIR)/string.c \
-	$(LIB_DIR)/libgcc_compat.c
+	$(LIB_DIR)/libgcc_compat.c \
+	$(LIB_DIR)/rbtree.c
 
 # 目标文件
 BOOT_STAGE1_BIN := $(BUILD_DIR)/boot_stage1.bin
@@ -234,6 +238,10 @@ $(BUILD_DIR)/string.o: $(LIB_DIR)/string.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $<$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD_DIR)/rbtree.o: $(LIB_DIR)/rbtree.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (Red-Black Tree)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(BUILD_DIR)/libgcc_compat.o: $(LIB_DIR)/libgcc_compat.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (64位运算库)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -326,6 +334,14 @@ $(BUILD_DIR)/vma.o: $(KERNEL_DIR)/mm/vma.c | $(BUILD_DIR)
 
 $(BUILD_DIR)/uaccess.o: $(KERNEL_DIR)/mm/uaccess.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (User Access)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/page_reclaim.o: $(KERNEL_DIR)/mm/page_reclaim.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (Page Reclaim/LRU)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/oom.o: $(KERNEL_DIR)/mm/oom.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (OOM Killer)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # 进程管理第5章新增的进程管理文件
@@ -459,6 +475,10 @@ $(BUILD_DIR)/syscall_table.o: $(KERNEL_DIR)/syscall/syscall_table.c | $(BUILD_DI
 
 $(BUILD_DIR)/sys_io.o: $(KERNEL_DIR)/syscall/sys_io.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (Syscall I/O)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/sys_mlock.o: $(KERNEL_DIR)/syscall/sys_mlock.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (mlock/munlock)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/sys_process.o: $(KERNEL_DIR)/syscall/sys_process.c | $(BUILD_DIR)

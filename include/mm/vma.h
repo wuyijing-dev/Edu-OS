@@ -18,6 +18,7 @@
 #define VMA_SHARED    0x20  /* 共享映射 */
 #define VMA_PRIVATE   0x40  /* 私有映射（COW） */
 #define VMA_ANONYMOUS 0x80  /* 匿名映射 */
+#define VMA_LOCKED    0x100 /* 内存锁定（不可换出） */
 
 /* 虚拟内存区域 */
 struct vma {
