@@ -221,21 +221,50 @@ int vma_handle_page_fault(struct vma *vma, uint32_t fault_addr,
                 }
             }
         } else if (vma->private_data) {
-            /* 设备映射：直接使用物理地址（如BGA framebuffer）
-             * private_data存储设备的物理基地址
+            /* 检查是否为共享内存或设备映射 */
+            uint32_t private_addr = (uint32_t)vma->private_data;
+            
+            /* 判断是内核虚拟地址（共享内存）还是物理地址（设备）
+             * 内核虚拟地址: 0xC0000000 - 0xEFFFFFFF（内核代码/数据/堆）
+             * 设备物理地址: 0xF0000000 - 0xFFFFFFFF（设备MMIO区域）
              */
-            serial_write('D');
-            serial_write('E');
-            serial_write('V');
-            
-            /* 计算本页对应的设备物理地址 */
-            uint32_t offset_in_vma = vaddr - vma->start;
-            uint32_t device_phys = (uint32_t)vma->private_data + offset_in_vma;
-            
-            /* 使用设备物理地址替代paddr */
-            pmm_free_frame(paddr);  /* 释放刚分配的物理页 */
-            paddr = device_phys;     /* 使用设备物理地址 */
-            page_ptr = NULL;         /* 设备内存不需要初始化 */
+            if (private_addr >= 0xC0000000 && private_addr < 0xF0000000) {
+                /* 共享内存映射：private_data是内核虚拟地址 */
+                serial_write('S');
+                serial_write('H');
+                serial_write('M');
+                
+                /* 计算本页对应的共享内存地址 */
+                uint32_t offset_in_vma = vaddr - vma->start;
+                uint32_t shm_vaddr = private_addr + offset_in_vma;
+                
+                /* 将内核虚拟地址转换为物理地址 */
+                extern uint32_t vmm_virt_to_phys(uint32_t vaddr);
+                uint32_t shm_phys = vmm_virt_to_phys(shm_vaddr);
+                
+                if (shm_phys) {
+                    /* 使用共享内存的物理地址 */
+                    pmm_free_frame(paddr);  /* 释放刚分配的物理页 */
+                    paddr = shm_phys;        /* 使用共享内存物理地址 */
+                    page_ptr = NULL;         /* 共享内存已初始化 */
+                }
+            } else {
+                /* 设备映射：直接使用物理地址（如BGA framebuffer）
+                 * private_data存储设备的物理基地址
+                 */
+                serial_write('D');
+                serial_write('E');
+                serial_write('V');
+                
+                /* 计算本页对应的设备物理地址 */
+                uint32_t offset_in_vma = vaddr - vma->start;
+                uint32_t device_phys = private_addr + offset_in_vma;
+                
+                /* 使用设备物理地址替代paddr */
+                pmm_free_frame(paddr);  /* 释放刚分配的物理页 */
+                paddr = device_phys;     /* 使用设备物理地址 */
+                page_ptr = NULL;         /* 设备内存不需要初始化 */
+            }
         }
         /* VMA_ZERO 和 VMA_ANONYMOUS 已经通过 memset 处理了 */
     }

@@ -14,6 +14,7 @@
 #include <mm/vma.h>
 #include <process/process.h>
 #include <fs/vfs.h>
+#include <ipc/shm.h>
 #include <kernel.h>
 #include <string.h>
 
@@ -85,12 +86,14 @@ void *mmap_impl(void *addr, size_t length, int prot, int flags, int fd, off_t of
     kprintf("[MMAP] Request: addr=%p, len=%u, prot=0x%x, flags=0x%x, fd=%d, off=%u\n",
             addr, length, prot, flags, fd, offset);
     
-    /* 特殊处理：设备映射（如framebuffer）
+    /* 特殊处理：设备映射（如framebuffer）和共享内存对象
      * Linux风格：通过检查文件inode来判断是否为设备映射
      * - 不从文件读取数据
-     * - 直接映射设备物理内存
+     * - 直接映射设备物理内存或共享内存
      */
     bool is_device_mapping = false;
+    bool is_shm_mapping = false;
+    void *shm_data = NULL;
     
     if (!(flags & MAP_ANONYMOUS) && fd >= 0) {
         /* 通过进程fd_table获取文件 */
@@ -103,20 +106,30 @@ void *mmap_impl(void *addr, size_t length, int prot, int flags, int fd, off_t of
             struct vfs_file *file = proc->fd_table->files[fd];
             kprintf("[MMAP_DEBUG] fd_table=%p, file=%p\n", proc->fd_table, file);
             
-            if (file && file->inode) {
-                kprintf("[MMAP_DEBUG] inode=%p, rdev=0x%x\n", file->inode, file->inode->rdev);
-                
-                /* 检查是否为framebuffer设备（通过rdev判断）
-                 * Linux风格：使用MAJOR宏提取major号（已通过vfs.h包含）
-                 * framebuffer设备major=29
-                 */
-                uint32_t major = MAJOR(file->inode->rdev);
-                kprintf("[MMAP_DEBUG] major=%d (checking if == 29)\n", major);
-                
-                if (major == 29) {
-                    is_device_mapping = true;
-                    kprintf("[MMAP] Framebuffer device detected (fd=%d, rdev=0x%x, major=%d)\n", 
-                            fd, file->inode->rdev, major);
+            if (file) {
+                /* 检查是否为共享内存对象 */
+                if (file->private_data && !file->inode) {
+                    /* 共享内存对象：没有inode但有private_data */
+                    struct shm_object *obj = (struct shm_object *)file->private_data;
+                    is_shm_mapping = true;
+                    shm_data = obj->data;
+                    kprintf("[MMAP] Shared memory object detected (fd=%d, size=%zu)\n",
+                            fd, obj->size);
+                } else if (file->inode) {
+                    kprintf("[MMAP_DEBUG] inode=%p, rdev=0x%x\n", file->inode, file->inode->rdev);
+                    
+                    /* 检查是否为framebuffer设备（通过rdev判断）
+                     * Linux风格：使用MAJOR宏提取major号（已通过vfs.h包含）
+                     * framebuffer设备major=29
+                     */
+                    uint32_t major = MAJOR(file->inode->rdev);
+                    kprintf("[MMAP_DEBUG] major=%d (checking if == 29)\n", major);
+                    
+                    if (major == 29) {
+                        is_device_mapping = true;
+                        kprintf("[MMAP] Framebuffer device detected (fd=%d, rdev=0x%x, major=%d)\n", 
+                                fd, file->inode->rdev, major);
+                    }
                 }
             }
         }
@@ -127,6 +140,9 @@ void *mmap_impl(void *addr, size_t length, int prot, int flags, int fd, off_t of
         /* 不直接返回内核地址，而是创建用户空间VMA
          * VMA的Page Fault处理器会映射设备内存
          */
+    } else if (is_shm_mapping) {
+        kprintf("[MMAP] Shared memory mapping detected\n");
+        /* 共享内存对象映射：将内核空间的共享内存映射到用户空间 */
     }
     
     /* 参数验证 */
@@ -210,6 +226,11 @@ void *mmap_impl(void *addr, size_t length, int prot, int flags, int fd, off_t of
             } else {
                 kprintf("[MMAP] Warning: Device physical address not available\n");
             }
+        } else if (is_shm_mapping && shm_data) {
+            /* 共享内存映射：存储内核空间地址 */
+            new_vma->private_data = shm_data;
+            kprintf("[MMAP] Shared memory VMA: fd=%d, kernel_addr=%p, size=%u\n",
+                    fd, shm_data, length);
         }
     }
     

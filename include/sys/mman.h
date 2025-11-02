@@ -36,13 +36,25 @@
 #define MADV_WILLNEED   3   /* 将要访问 */
 #define MADV_DONTNEED   4   /* 不再访问 */
 
-/* shm_open标志（使用open()的标志）*/
+/* shm_open标志（使用open()的标志）- 避免与vfs.h冲突 */
+#ifndef O_RDONLY
 #define O_RDONLY    0x0000
+#endif
+#ifndef O_WRONLY
 #define O_WRONLY    0x0001
+#endif
+#ifndef O_RDWR
 #define O_RDWR      0x0002
+#endif
+#ifndef O_CREAT
 #define O_CREAT     0x0040
+#endif
+#ifndef O_EXCL
 #define O_EXCL      0x0080
+#endif
+#ifndef O_TRUNC
 #define O_TRUNC     0x0200
+#endif
 
 /* 系统调用 */
 #ifdef __KERNEL__
@@ -62,4 +74,3 @@ int shm_unlink(const char *name);
 #endif
 
 #endif /* _SYS_MMAN_H */
-

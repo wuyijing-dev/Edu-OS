@@ -11,6 +11,7 @@
 #include <sys/time.h>
 #include <sys/select.h>
 #include <sys/poll.h>
+#include <sys/mman.h>
 
 /* 外部系统调用函数声明 */
 
@@ -68,6 +69,9 @@ extern int sys_chdir(const char *path);
 extern void *sys_brk(void *addr);
 extern void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
 extern int sys_munmap(void *addr, size_t length);
+extern int sys_ftruncate(int fd, off_t length);
+extern int sys_shm_open(const char *name, int oflag, mode_t mode);
+extern int sys_shm_unlink(const char *name);
 
 /* ========== 系统调用表 ========== */
 
@@ -110,11 +114,14 @@ syscall_func_t syscall_table[MAX_SYSCALLS] = {
     [SYS_sigaction] = (syscall_func_t)sys_sigaction,  /* 67 - POSIX信号动作 */
     [SYS_mmap]      = (syscall_func_t)sys_mmap,       /* 90 */
     [SYS_munmap]    = (syscall_func_t)sys_munmap,     /* 91 */
+    [SYS_ftruncate] = (syscall_func_t)sys_ftruncate,  /* 93 - POSIX ftruncate */
     [SYS_stat]      = (syscall_func_t)sys_stat,       /* 106 - POSIX stat */
     [SYS_lstat]     = (syscall_func_t)sys_lstat,      /* 107 - POSIX lstat */
     [SYS_fstat]     = (syscall_func_t)sys_fstat,      /* 108 - POSIX fstat */
     [SYS_sigprocmask] = (syscall_func_t)sys_sigprocmask, /* 126 - POSIX信号掩码 */
     [SYS_nanosleep] = (syscall_func_t)sys_nanosleep,  /* 162 - POSIX sleep */
     [SYS_poll]      = (syscall_func_t)sys_poll,       /* 168 - POSIX poll */
+    [SYS_shm_open]  = (syscall_func_t)sys_shm_open,   /* 305 - POSIX shm_open */
+    [SYS_shm_unlink] = (syscall_func_t)sys_shm_unlink, /* 306 - POSIX shm_unlink */
 };
 

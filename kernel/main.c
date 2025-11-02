@@ -128,6 +128,10 @@ void kernel_main(void)
     input_subsystem_init();
     input_devfs_init();
     
+    /* POSIX：初始化共享内存子系统 */
+    extern int shm_init(void);
+    shm_init();
+    
     /* 初始化鼠标驱动和设备 */
     mouse_init();
     dev_mouse_init();

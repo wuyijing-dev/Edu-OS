@@ -250,83 +250,50 @@ void vmm_map_page_in_directory(struct page_directory *pd, uint32_t virt, uint32_
     uint32_t pd_index = PD_INDEX(virt);
     uint32_t pt_index = PT_INDEX(virt);
     
-    /* Linux风格：使用临时页表映射目标页目录 */
-    uint32_t *current_pd = GET_PAGE_DIRECTORY();
+    /* 使用kmap临时映射页目录和页表（Linux风格）*/
+    extern void *kmap(uint32_t paddr);
+    extern void kunmap(void *vaddr);
     
-    /* 分配临时页表 */
-    uint32_t temp_pt_pd_phys = pmm_alloc_frame();
-    if (!temp_pt_pd_phys) return;
-    
-    /* 清空并映射新页目录 */
-    if (temp_pt_pd_phys < 0x400000) {
-        memset((void*)(temp_pt_pd_phys + 0xC0000000), 0, 4096);
-        uint32_t *temp_pt = (uint32_t*)(temp_pt_pd_phys + 0xC0000000);
-        temp_pt[0] = pte_create(pd->physical_addr, PAGE_PRESENT | PAGE_WRITE);
-    }
-    
-    /* 使用PD[767]指向临时页表 */
-    uint32_t temp_pd_virt = 0xBFC00000;
-    uint32_t old_pde_767 = current_pd[767];
-    current_pd[767] = pde_create(temp_pt_pd_phys, PAGE_PRESENT | PAGE_WRITE);
-    asm volatile("invlpg (%0)" : : "r"(temp_pd_virt) : "memory");
-    
-    uint32_t *page_directory = (uint32_t*)temp_pd_virt;
+    /* 映射目标页目录 */
+    uint32_t *page_directory = (uint32_t*)kmap(pd->physical_addr);
+    if (!page_directory) return;
     
     /* 检查页表是否存在 */
     if (!pte_is_present(page_directory[pd_index])) {
         /* 分配新页表并清空 */
         uint32_t pt_phys = pmm_alloc_frame();
         if (pt_phys == 0) {
-            current_pd[767] = old_pde_767;
-            asm volatile("invlpg (%0)" : : "r"(temp_pd_virt) : "memory");
-            pmm_free_frame(temp_pt_pd_phys);
+            kunmap(page_directory);
             return;
         }
         
-        /* 清空新页表（使用直接物理映射） */
-        if (pt_phys < 0x400000) {
-            memset((void*)(pt_phys + 0xC0000000), 0, 4096);
+        /* 清空新页表 */
+        void *pt_temp = kmap(pt_phys);
+        if (pt_temp) {
+            memset(pt_temp, 0, 4096);
+            kunmap(pt_temp);
         }
         
         /* 设置页目录项 */
         page_directory[pd_index] = pde_create(pt_phys, PAGE_PRESENT | PAGE_WRITE | PAGE_USER);
     }
     
-    /* 获取页表物理地址并通过PD[766]临时映射 */
+    /* 获取页表物理地址 */
     uint32_t pt_phys = pde_get_addr(page_directory[pd_index]);
     
-    /* 分配另一个临时页表用于映射目标页表 */
-    uint32_t temp_pt_pt_phys = pmm_alloc_frame();
-    if (!temp_pt_pt_phys) {
-        current_pd[767] = old_pde_767;
-        asm volatile("invlpg (%0)" : : "r"(temp_pd_virt) : "memory");
-        pmm_free_frame(temp_pt_pd_phys);
+    /* 映射目标页表 */
+    uint32_t *page_table = (uint32_t*)kmap(pt_phys);
+    if (!page_table) {
+        kunmap(page_directory);
         return;
     }
-    
-    if (temp_pt_pt_phys < 0x400000) {
-        memset((void*)(temp_pt_pt_phys + 0xC0000000), 0, 4096);
-        uint32_t *temp_pt2 = (uint32_t*)(temp_pt_pt_phys + 0xC0000000);
-        temp_pt2[0] = pte_create(pt_phys, PAGE_PRESENT | PAGE_WRITE);
-    }
-    
-    uint32_t temp_pt_virt = 0xBF800000;
-    uint32_t old_pde_766 = current_pd[766];
-    current_pd[766] = pde_create(temp_pt_pt_phys, PAGE_PRESENT | PAGE_WRITE);
-    asm volatile("invlpg (%0)" : : "r"(temp_pt_virt) : "memory");
-    
-    uint32_t *page_table = (uint32_t*)temp_pt_virt;
     
     /* 设置页表项 */
     page_table[pt_index] = pte_create(phys, flags);
     
-    /* 恢复临时映射并释放资源 */
-    current_pd[766] = old_pde_766;
-    current_pd[767] = old_pde_767;
-    asm volatile("invlpg (%0)" : : "r"(temp_pt_virt) : "memory");
-    asm volatile("invlpg (%0)" : : "r"(temp_pd_virt) : "memory");
-    pmm_free_frame(temp_pt_pd_phys);
-    pmm_free_frame(temp_pt_pt_phys);
+    /* 释放临时映射 */
+    kunmap(page_table);
+    kunmap(page_directory);
     
     /* 关键修复：如果目标页目录是当前进程的页目录，必须刷新TLB */
     uint32_t current_cr3;

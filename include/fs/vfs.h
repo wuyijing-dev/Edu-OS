@@ -36,6 +36,7 @@
 #define O_WRONLY    1
 #define O_RDWR      2
 #define O_CREAT     0x0040
+#define O_EXCL      0x0080
 #define O_TRUNC     0x0200
 #define O_APPEND    0x0400
 
@@ -188,4 +189,5 @@ ssize_t vfs_file_write(struct vfs_file *file, const void *buf, size_t count);
 struct vfs_file *vfs_state_get_file(int fd);
 
 #endif // VFS_H
+
 

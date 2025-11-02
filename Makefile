@@ -105,7 +105,9 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/syscall/sys_stat.c \
 	$(KERNEL_DIR)/syscall/sys_ioctl.c \
 	$(KERNEL_DIR)/syscall/sys_select.c \
+	$(KERNEL_DIR)/syscall/sys_shm.c \
 	$(KERNEL_DIR)/ipc/pipe.c \
+	$(KERNEL_DIR)/ipc/shm.c \
 	$(KERNEL_DIR)/input/input_core.c \
 	$(KERNEL_DIR)/input/input_devfs.c \
 	$(KERNEL_DIR)/sync/wait_queue.c \
@@ -505,6 +507,14 @@ $(BUILD_DIR)/sys_select.o: $(KERNEL_DIR)/syscall/sys_select.c | $(BUILD_DIR)
 
 $(BUILD_DIR)/wait_queue.o: $(KERNEL_DIR)/sync/wait_queue.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (Wait Queue)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/sys_shm.o: $(KERNEL_DIR)/syscall/sys_shm.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (POSIX Shared Memory Syscalls)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/shm.o: $(KERNEL_DIR)/ipc/shm.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (POSIX Shared Memory)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # 网络子系统

@@ -45,6 +45,7 @@
 #define SYS_readdir     89
 #define SYS_mmap        90
 #define SYS_munmap      91
+#define SYS_ftruncate   93   /* POSIX ftruncate() */
 #define SYS_fstat       108
 #define SYS_stat        106  /* POSIX stat() */
 #define SYS_lstat       107  /* POSIX lstat() */
@@ -64,6 +65,8 @@
 #define SYS_thread_join     302
 #define SYS_usleep          303
 #define SYS_msleep          304
+#define SYS_shm_open        305  /* POSIX shm_open() */
+#define SYS_shm_unlink      306  /* POSIX shm_unlink() */
 
 /* 最大系统调用号 */
 #define MAX_SYSCALLS    512
