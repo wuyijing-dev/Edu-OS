@@ -104,9 +104,11 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/syscall/sys_fd.c \
 	$(KERNEL_DIR)/syscall/sys_stat.c \
 	$(KERNEL_DIR)/syscall/sys_ioctl.c \
+	$(KERNEL_DIR)/syscall/sys_select.c \
 	$(KERNEL_DIR)/ipc/pipe.c \
 	$(KERNEL_DIR)/input/input_core.c \
 	$(KERNEL_DIR)/input/input_devfs.c \
+	$(KERNEL_DIR)/sync/wait_queue.c \
 	$(KERNEL_DIR)/net/netdev.c \
 	$(KERNEL_DIR)/net/ethernet.c \
 	$(KERNEL_DIR)/net/ip.c \
@@ -495,6 +497,14 @@ $(BUILD_DIR)/input_core.o: $(KERNEL_DIR)/input/input_core.c | $(BUILD_DIR)
 
 $(BUILD_DIR)/input_devfs.o: $(KERNEL_DIR)/input/input_devfs.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (Linux Input DevFS)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/sys_select.o: $(KERNEL_DIR)/syscall/sys_select.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (POSIX select/poll)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/wait_queue.o: $(KERNEL_DIR)/sync/wait_queue.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (Wait Queue)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # 网络子系统

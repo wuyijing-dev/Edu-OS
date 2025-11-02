@@ -16,6 +16,7 @@ static struct vfs_file_operations input_fops = {
     .read = input_dev_read,
     .write = NULL,  /* 输入设备不支持写 */
     .ioctl = input_dev_ioctl,
+    .poll = input_dev_poll,  /* select/poll支持 */
 };
 
 /**

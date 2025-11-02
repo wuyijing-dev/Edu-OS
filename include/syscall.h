@@ -50,6 +50,8 @@
 #define SYS_lstat       107  /* POSIX lstat() */
 #define SYS_clone       120
 #define SYS_gettimeofday 78  /* POSIX gettimeofday() */
+#define SYS_select      82   /* POSIX select() */
+#define SYS_poll        168  /* POSIX poll() */
 #define SYS_nanosleep   162
 #define SYS_gettid      186
 #define SYS_futex       240

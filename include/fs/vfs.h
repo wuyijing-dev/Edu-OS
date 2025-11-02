@@ -86,12 +86,16 @@ struct vfs_superblock_operations {
 };
 
 /* File操作表 */
+/* 前向声明 */
+struct wait_queue_head;
+
 struct vfs_file_operations {
     int (*open)(struct vfs_inode *inode, struct vfs_file *file);
     int (*release)(struct vfs_file *file);
     int (*read)(struct vfs_file *file, char *buf, size_t count);
     int (*write)(struct vfs_file *file, const char *buf, size_t count);
     int (*ioctl)(struct vfs_file *file, uint32_t cmd, unsigned long arg);
+    unsigned int (*poll)(struct vfs_file *file, struct wait_queue_head *wait);  /* Linux风格poll */
 };
 
 /* Inode操作表 */

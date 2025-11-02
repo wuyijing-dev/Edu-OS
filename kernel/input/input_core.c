@@ -8,7 +8,9 @@
 #include <kernel.h>
 #include <string.h>
 #include <sys/time.h>
+#include <sys/poll.h>
 #include <mm/uaccess.h>
+#include <wait_queue.h>
 
 /* 全局输入管理器 */
 struct input_manager *g_input_manager = NULL;
@@ -65,6 +67,12 @@ struct input_dev *input_allocate_device(void)
     dev->opened = false;
     dev->grabbed = false;
     
+    /* 分配等待队列 */
+    dev->wait_queue = (struct wait_queue_head *)kmalloc(sizeof(struct wait_queue_head));
+    if (dev->wait_queue) {
+        init_waitqueue_head(dev->wait_queue);
+    }
+    
     return dev;
 }
 
@@ -74,6 +82,9 @@ struct input_dev *input_allocate_device(void)
 void input_free_device(struct input_dev *dev)
 {
     if (dev) {
+        if (dev->wait_queue) {
+            kfree(dev->wait_queue);
+        }
         kfree(dev);
     }
 }
@@ -178,7 +189,10 @@ void input_event(struct input_dev *dev, uint16_t type, uint16_t code, int32_t va
     
     spin_unlock(&dev->lock);
     
-    /* TODO: 唤醒等待的进程（需要select/poll支持） */
+    /* 唤醒等待的进程（select/poll支持）*/
+    if (dev->wait_queue) {
+        wake_up(dev->wait_queue);
+    }
 }
 
 /**
@@ -369,5 +383,40 @@ int input_dev_ioctl(struct vfs_file *file, unsigned long request, unsigned long 
         kprintf("[INPUT] Unknown ioctl: 0x%lx\n", request);
         return -1;
     }
+}
+
+/**
+ * VFS文件操作：poll检查
+ */
+unsigned int input_dev_poll(struct vfs_file *file, struct wait_queue_head *wait)
+{
+    if (!file || !file->private_data) {
+        return POLLNVAL;
+    }
+    
+    struct input_dev *dev = (struct input_dev *)file->private_data;
+    unsigned int mask = 0;
+    
+    /* 将当前进程添加到等待队列 */
+    if (wait && dev->wait_queue) {
+        extern struct process *process_get_current(void);
+        struct process *proc = process_get_current();
+        
+        if (proc) {
+            struct wait_queue_entry entry;
+            entry.process = proc;
+            entry.next = NULL;
+            add_wait_queue(dev->wait_queue, &entry);
+        }
+    }
+    
+    /* 检查是否有数据可读 */
+    spin_lock(&dev->lock);
+    if (dev->event_count > 0) {
+        mask |= POLLIN | POLLRDNORM;  /* 有数据可读 */
+    }
+    spin_unlock(&dev->lock);
+    
+    return mask;
 }
 

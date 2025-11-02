@@ -9,6 +9,8 @@
 #include <signal.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#include <sys/select.h>
+#include <sys/poll.h>
 
 /* 外部系统调用函数声明 */
 
@@ -45,6 +47,8 @@ extern int sys_ioctl(int fd, unsigned long request, unsigned long arg);
 extern int sys_time(uint32_t *tloc);
 extern int sys_gettimeofday(struct timeval *tv, struct timezone *tz);
 extern int sys_nanosleep(const struct timespec *req, struct timespec *rem);
+extern int sys_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout);
+extern int sys_poll(struct pollfd *fds, unsigned int nfds, int timeout);
 
 /* 文件I/O */
 extern int sys_read(int fd, char *buf, size_t count);
@@ -92,6 +96,7 @@ syscall_func_t syscall_table[MAX_SYSCALLS] = {
     [SYS_pause]     = (syscall_func_t)sys_pause,      /* 29 - POSIX暂停 */
     [SYS_kill]      = (syscall_func_t)sys_kill,       /* 37 - POSIX信号发送 */
     [SYS_gettimeofday] = (syscall_func_t)sys_gettimeofday, /* 78 - POSIX时间 */
+    [SYS_select]    = (syscall_func_t)sys_select,     /* 82 - POSIX select */
     [SYS_mkdir]     = (syscall_func_t)sys_mkdir,      /* 39 */
     [SYS_rmdir]     = (syscall_func_t)sys_rmdir,      /* 40 */
     [SYS_dup]       = (syscall_func_t)sys_dup,        /* 41 - POSIX dup */
@@ -110,5 +115,6 @@ syscall_func_t syscall_table[MAX_SYSCALLS] = {
     [SYS_fstat]     = (syscall_func_t)sys_fstat,      /* 108 - POSIX fstat */
     [SYS_sigprocmask] = (syscall_func_t)sys_sigprocmask, /* 126 - POSIX信号掩码 */
     [SYS_nanosleep] = (syscall_func_t)sys_nanosleep,  /* 162 - POSIX sleep */
+    [SYS_poll]      = (syscall_func_t)sys_poll,       /* 168 - POSIX poll */
 };
 

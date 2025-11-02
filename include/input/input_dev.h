@@ -13,6 +13,9 @@
 /* 输入事件环形缓冲区大小 */
 #define INPUT_EVENT_BUFFER_SIZE 64
 
+/* 前向声明 */
+struct wait_queue_head;
+
 /**
  * 输入设备结构（Linux风格）
  */
@@ -28,6 +31,9 @@ struct input_dev {
     
     /* 同步原语（简化版：使用自旋锁） */
     uint32_t lock;                      /* 保护事件缓冲区 */
+    
+    /* 等待队列（用于select/poll）*/
+    struct wait_queue_head *wait_queue; /* 等待队列 */
     
     /* 设备状态 */
     bool opened;                        /* 是否已打开 */
@@ -137,6 +143,7 @@ int input_dev_open(struct vfs_file *file);
 int input_dev_release(struct vfs_file *file);
 ssize_t input_dev_read(struct vfs_file *file, char *buf, size_t count, off_t *offset);
 int input_dev_ioctl(struct vfs_file *file, unsigned long request, unsigned long arg);
+unsigned int input_dev_poll(struct vfs_file *file, struct wait_queue_head *wait);
 
 #endif /* _INPUT_DEV_H */
 
