@@ -1,0 +1,36 @@
+# ====================================================================
+# scripts/Makefile.build - 子目录构建规则（Linux风格）
+# ====================================================================
+
+src := $(obj)
+
+# 包含子目录的Makefile
+include $(src)/Makefile
+
+# 输出目录
+OUTPUT ?= $(src)
+
+# 修正路径：将.o文件名转为完整路径
+obj-y := $(addprefix $(OUTPUT)/,$(obj-y))
+
+# C文件编译
+$(OUTPUT)/%.o: $(src)/%.c
+	@echo "  CC      $@"
+	@mkdir -p $(dir $@)
+	@$(CC) $(CFLAGS) -c $< -o $@
+
+# 汇编文件编译
+$(OUTPUT)/%.o: $(src)/%.S
+	@echo "  AS      $@"
+	@mkdir -p $(dir $@)
+	@$(AS) $(ASFLAGS) -c $< -o $@
+
+# 默认目标：构建所有对象
+__build: $(obj-y)
+	@:
+
+# 清理
+clean:
+	@rm -f $(OUTPUT)/*.o
+
+.PHONY: __build clean

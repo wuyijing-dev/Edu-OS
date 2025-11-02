@@ -1,0 +1,194 @@
+# ====================================================================
+# EduOS Makefile - Linux Kernel Style
+# ====================================================================
+
+VERSION = 0
+PATCHLEVEL = 5
+SUBLEVEL = 0
+EXTRAVERSION =
+NAME = EduOS
+
+# 配置
+ARCH := i386
+CROSS_COMPILE :=
+
+# 工具链
+CC := $(CROSS_COMPILE)gcc
+LD := $(CROSS_COMPILE)ld
+AS := $(CROSS_COMPILE)as
+AR := $(CROSS_COMPILE)ar
+OBJCOPY := $(CROSS_COMPILE)objcopy
+NM := $(CROSS_COMPILE)nm
+
+# 目录
+srctree := .
+objtree := .
+export srctree objtree
+
+KERNEL_DIR := kernel
+ARCH_DIR := $(KERNEL_DIR)/arch/$(ARCH)
+BUILD_DIR := build
+USER_DIR := user
+
+# 编译选项
+CFLAGS := -m32 -nostdlib -nostdinc -fno-builtin -fno-stack-protector
+CFLAGS += -Wall -Wextra -Werror=implicit-function-declaration -O2
+CFLAGS += -I$(srctree)/include -D__KERNEL__
+CFLAGS += -fno-omit-frame-pointer
+
+ASFLAGS := --32
+LDFLAGS := -m elf_i386 -nostdlib
+
+# 导出变量给子Makefile
+export ARCH CC LD AS AR OBJCOPY NM
+export CFLAGS ASFLAGS LDFLAGS
+export KERNEL_DIR ARCH_DIR BUILD_DIR
+
+# ====================================================================
+# 内核对象（类似Linux的obj-y）
+# ====================================================================
+
+# 核心内核对象
+core-y := $(KERNEL_DIR)/
+vmlinux-dirs := $(patsubst %/,%,$(filter %/, $(core-y)))
+
+# 启动对象
+head-y := $(BUILD_DIR)/boot.o $(BUILD_DIR)/syscall_entry.o
+
+# 所有内置对象
+vmlinux-all := $(head-y) \
+               $(BUILD_DIR)/main.o \
+               $(BUILD_DIR)/printk.o \
+               $(BUILD_DIR)/panic.o \
+               $(BUILD_DIR)/kernel-built-in.o
+
+# ====================================================================
+# 默认目标
+# ====================================================================
+
+.PHONY: all clean run help
+
+all: $(BUILD_DIR)/kernel.bin $(BUILD_DIR)/fat32_test.img
+	@echo "======================================"
+	@echo "  EduOS $(VERSION).$(PATCHLEVEL).$(SUBLEVEL) 构建完成"
+	@echo "======================================"
+
+# ====================================================================
+# 内核构建
+# ====================================================================
+
+# 创建build目录
+$(BUILD_DIR):
+	@mkdir -p $(BUILD_DIR)
+
+# 构建内核子系统（递归make）
+$(BUILD_DIR)/kernel-built-in.o: $(vmlinux-dirs) | $(BUILD_DIR)
+	@echo "  LD      $@"
+	@$(LD) $(LDFLAGS) -r -o $@ \
+		$(BUILD_DIR)/process/*.o \
+		$(BUILD_DIR)/mm/*.o \
+		$(BUILD_DIR)/fs/*.o \
+		$(BUILD_DIR)/syscall/*.o \
+		$(BUILD_DIR)/drivers/*.o \
+		$(BUILD_DIR)/exec/*.o \
+		$(BUILD_DIR)/net/*.o \
+		$(BUILD_DIR)/ipc/*.o \
+		$(BUILD_DIR)/arch/i386/*.o 2>/dev/null || true
+
+# 递归构建子目录
+$(vmlinux-dirs): | $(BUILD_DIR)
+	@mkdir -p $(BUILD_DIR)/$@
+	@$(MAKE) $(build)=$@ OUTPUT=$(BUILD_DIR)/$@
+
+# 定义build宏（类似Linux）
+build := -f $(srctree)/scripts/Makefile.build obj
+
+# 编译独立的内核文件
+$(BUILD_DIR)/main.o: $(KERNEL_DIR)/main.c | $(BUILD_DIR)
+	@echo "  CC      $@"
+	@$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/printk.o: $(KERNEL_DIR)/printk.c | $(BUILD_DIR)
+	@echo "  CC      $@"
+	@$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/panic.o: $(KERNEL_DIR)/panic.c | $(BUILD_DIR)
+	@echo "  CC      $@"
+	@$(CC) $(CFLAGS) -c $< -o $@
+
+# 启动代码
+$(BUILD_DIR)/boot.o: boot/boot.S | $(BUILD_DIR)
+	@echo "  AS      $@"
+	@$(AS) $(ASFLAGS) -o $@ $<
+
+$(BUILD_DIR)/syscall_entry.o: boot/syscall_entry.S | $(BUILD_DIR)
+	@echo "  AS      $@"
+	@$(AS) $(ASFLAGS) -o $@ $<
+
+# 链接内核ELF
+$(BUILD_DIR)/kernel.elf: $(vmlinux-all) boot/linker.ld | $(BUILD_DIR)
+	@echo "  LD      $@"
+	@$(LD) $(LDFLAGS) -T boot/linker.ld -o $@ $(vmlinux-all)
+
+# 提取二进制
+$(BUILD_DIR)/kernel.bin: $(BUILD_DIR)/kernel.elf
+	@echo "  OBJCOPY $@"
+	@$(OBJCOPY) -O binary $< $@
+	@echo "  内核大小: $$(stat -c%s $@) 字节"
+
+# ====================================================================
+# 磁盘镜像
+# ====================================================================
+
+$(BUILD_DIR)/fat32_test.img: $(BUILD_DIR)/kernel.bin
+	@echo "  CREATE  FAT32镜像"
+	@./tools/create_fat32.sh $(BUILD_DIR) $(USER_DIR)
+
+# ====================================================================
+# 运行
+# ====================================================================
+
+run: all
+	@echo "启动 EduOS..."
+	@qemu-system-i386 \
+		-kernel $(BUILD_DIR)/kernel.bin \
+		-drive file=$(BUILD_DIR)/fat32_test.img,format=raw,index=0,media=disk \
+		-m 128M \
+		-serial stdio \
+		-vga std \
+		-rtc base=localtime \
+		-netdev user,id=net0 \
+		-device rtl8139,netdev=net0
+
+# ====================================================================
+# 清理
+# ====================================================================
+
+clean:
+	@echo "清理构建文件..."
+	@rm -rf $(BUILD_DIR)
+	@echo "✓ 清理完成"
+
+# ====================================================================
+# 帮助
+# ====================================================================
+
+help:
+	@echo "EduOS $(VERSION).$(PATCHLEVEL) 构建系统"
+	@echo ""
+	@echo "目标："
+	@echo "  all        - 构建内核和磁盘镜像（默认）"
+	@echo "  clean      - 清理构建文件"
+	@echo "  run        - 构建并运行内核"
+	@echo "  help       - 显示此帮助"
+	@echo ""
+	@echo "变量："
+	@echo "  ARCH       - 目标架构（默认：i386）"
+	@echo "  V=1        - 详细输出"
+
+# ====================================================================
+# 伪目标
+# ====================================================================
+
+.PHONY: $(vmlinux-dirs) run clean help
+
