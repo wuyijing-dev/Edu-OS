@@ -18,30 +18,30 @@
 #define KEYBOARD_STATUS_TIMEOUT         0x40    // 超时错误
 #define KEYBOARD_STATUS_PARITY_ERROR    0x80    // 奇偶校验错误
 
-/* 特殊键扫描码 */
-#define KEY_ESCAPE          0x01
-#define KEY_BACKSPACE       0x0E
-#define KEY_TAB             0x0F
-#define KEY_ENTER           0x1C
-#define KEY_LEFT_CTRL       0x1D
-#define KEY_LEFT_SHIFT      0x2A
-#define KEY_RIGHT_SHIFT     0x36
-#define KEY_LEFT_ALT        0x38
-#define KEY_CAPS_LOCK       0x3A
-#define KEY_F1              0x3B
-#define KEY_F2              0x3C
-#define KEY_F3              0x3D
-#define KEY_F4              0x3E
-#define KEY_F5              0x3F
-#define KEY_F6              0x40
-#define KEY_F7              0x41
-#define KEY_F8              0x42
-#define KEY_F9              0x43
-#define KEY_F10             0x44
-#define KEY_NUM_LOCK        0x45
-#define KEY_SCROLL_LOCK     0x46
-#define KEY_F11             0x57
-#define KEY_F12             0x58
+/* PS/2扫描码（用于内部处理，避免与Linux keycode冲突）*/
+#define PS2_ESCAPE          0x01
+#define PS2_BACKSPACE       0x0E
+#define PS2_TAB             0x0F
+#define PS2_ENTER           0x1C
+#define PS2_LEFT_CTRL       0x1D
+#define PS2_LEFT_SHIFT      0x2A
+#define PS2_RIGHT_SHIFT     0x36
+#define PS2_LEFT_ALT        0x38
+#define PS2_CAPS_LOCK       0x3A
+#define PS2_F1              0x3B
+#define PS2_F2              0x3C
+#define PS2_F3              0x3D
+#define PS2_F4              0x3E
+#define PS2_F5              0x3F
+#define PS2_F6              0x40
+#define PS2_F7              0x41
+#define PS2_F8              0x42
+#define PS2_F9              0x43
+#define PS2_F10             0x44
+#define PS2_NUM_LOCK        0x45
+#define PS2_SCROLL_LOCK     0x46
+#define PS2_F11             0x57
+#define PS2_F12             0x58
 
 /* 扩展扫描码前缀 */
 #define KEY_EXTENDED        0xE0

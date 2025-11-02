@@ -122,6 +122,12 @@ void kernel_main(void)
     
     dev_console_init();
     
+    /* Linux风格：初始化输入子系统 */
+    extern int input_subsystem_init(void);
+    extern int input_devfs_init(void);
+    input_subsystem_init();
+    input_devfs_init();
+    
     /* 初始化鼠标驱动和设备 */
     mouse_init();
     dev_mouse_init();

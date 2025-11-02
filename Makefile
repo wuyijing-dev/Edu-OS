@@ -105,6 +105,8 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/syscall/sys_stat.c \
 	$(KERNEL_DIR)/syscall/sys_ioctl.c \
 	$(KERNEL_DIR)/ipc/pipe.c \
+	$(KERNEL_DIR)/input/input_core.c \
+	$(KERNEL_DIR)/input/input_devfs.c \
 	$(KERNEL_DIR)/net/netdev.c \
 	$(KERNEL_DIR)/net/ethernet.c \
 	$(KERNEL_DIR)/net/ip.c \
@@ -485,6 +487,14 @@ $(BUILD_DIR)/sys_ioctl.o: $(KERNEL_DIR)/syscall/sys_ioctl.c | $(BUILD_DIR)
 
 $(BUILD_DIR)/pipe.o: $(KERNEL_DIR)/ipc/pipe.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (POSIX Pipe)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/input_core.o: $(KERNEL_DIR)/input/input_core.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (Linux Input Core)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/input_devfs.o: $(KERNEL_DIR)/input/input_devfs.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (Linux Input DevFS)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # 网络子系统

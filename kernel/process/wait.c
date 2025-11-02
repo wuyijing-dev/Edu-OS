@@ -1,10 +1,19 @@
 /*
  * wait.c - 进程等待机制（wait/waitpid系统调用）
+ * 
+ * POSIX兼容的进程等待实现
  */
 
 #include <process/process.h>
+#include <sys/wait.h>
 #include <kernel.h>
 #include <string.h>
+
+/* errno错误码 */
+#define EINTR   4
+#define ECHILD  10
+#define EINVAL  22
+#define ESRCH   3
 
 /* 外部函数：遍历进程列表 */
 extern struct process *process_list_head;
@@ -51,7 +60,8 @@ pid_t sys_wait(int *status)
     if (child) {
         /* 有子进程已退出 */
         if (status) {
-            *status = child->exit_code;
+            /* 构造POSIX兼容的退出状态 */
+            *status = W_EXITCODE(child->exit_code, 0);
         }
         
         pid_t child_pid = child->pid;
@@ -59,7 +69,8 @@ pid_t sys_wait(int *status)
         /* 清理子进程资源 */
         process_destroy(child);
         
-        kprintf("[WAIT] Parent %u reaped child %u\n", current->pid, child_pid);
+        kprintf("[WAIT] Parent %u reaped child %u (exit_code=%d)\n", 
+                current->pid, child_pid, child->exit_code);
         
         return child_pid;
     }
