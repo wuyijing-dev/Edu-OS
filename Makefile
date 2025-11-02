@@ -64,6 +64,7 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/mm/kmap.c \
 	$(KERNEL_DIR)/mm/mmap.c \
 	$(KERNEL_DIR)/mm/vma.c \
+	$(KERNEL_DIR)/mm/uaccess.c \
 	$(KERNEL_DIR)/process/process.c \
 	$(KERNEL_DIR)/process/fd_table.c \
 	$(KERNEL_DIR)/process/scheduler.c \
@@ -102,6 +103,7 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/syscall/errno.c \
 	$(KERNEL_DIR)/syscall/sys_fd.c \
 	$(KERNEL_DIR)/syscall/sys_stat.c \
+	$(KERNEL_DIR)/syscall/sys_ioctl.c \
 	$(KERNEL_DIR)/ipc/pipe.c \
 	$(KERNEL_DIR)/net/netdev.c \
 	$(KERNEL_DIR)/net/ethernet.c \
@@ -316,6 +318,10 @@ $(BUILD_DIR)/vma.o: $(KERNEL_DIR)/mm/vma.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (VMA)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD_DIR)/uaccess.o: $(KERNEL_DIR)/mm/uaccess.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (User Access)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
 # 进程管理第5章新增的进程管理文件
 $(BUILD_DIR)/process.o: $(KERNEL_DIR)/process/process.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (Process Manager)$(NC)"
@@ -471,6 +477,10 @@ $(BUILD_DIR)/sys_fd.o: $(KERNEL_DIR)/syscall/sys_fd.c | $(BUILD_DIR)
 
 $(BUILD_DIR)/sys_stat.o: $(KERNEL_DIR)/syscall/sys_stat.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (File Status)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/sys_ioctl.o: $(KERNEL_DIR)/syscall/sys_ioctl.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (Device Control)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/pipe.o: $(KERNEL_DIR)/ipc/pipe.c | $(BUILD_DIR)

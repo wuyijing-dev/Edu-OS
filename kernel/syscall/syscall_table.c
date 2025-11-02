@@ -38,6 +38,9 @@ extern int sys_stat(const char *path, struct stat *buf);
 extern int sys_fstat(int fd, struct stat *buf);
 extern int sys_lstat(const char *path, struct stat *buf);
 
+/* 设备控制（POSIX） */
+extern int sys_ioctl(int fd, unsigned long request, unsigned long arg);
+
 /* 时间 */
 extern int sys_time(uint32_t *tloc);
 extern int sys_gettimeofday(struct timeval *tv, struct timezone *tz);
@@ -95,6 +98,7 @@ syscall_func_t syscall_table[MAX_SYSCALLS] = {
     [SYS_pipe]      = (syscall_func_t)sys_pipe,       /* 42 - POSIX pipe */
     [SYS_brk]       = (syscall_func_t)sys_brk,        /* 45 */
     [SYS_signal]    = (syscall_func_t)sys_signal,     /* 48 - POSIX信号 */
+    [SYS_ioctl]     = (syscall_func_t)sys_ioctl,      /* 54 - POSIX设备控制 */
     [SYS_fcntl]     = (syscall_func_t)sys_fcntl,      /* 55 - POSIX文件控制 */
     [SYS_dup2]      = (syscall_func_t)sys_dup2,       /* 63 - POSIX dup2 */
     [SYS_getppid]   = (syscall_func_t)sys_getppid,    /* 64 */

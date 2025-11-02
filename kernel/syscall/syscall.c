@@ -16,37 +16,10 @@ extern syscall_func_t syscall_table[MAX_SYSCALLS];
 /* ========== 地址验证 ========== */
 
 /*
- * 检查地址是否在用户空间
+ * 用户空间地址验证函数（实现在 kernel/mm/uaccess.c）
  */
-bool is_user_address(const void *addr)
-{
-    uint32_t va = (uint32_t)addr;
-    
-    /* 用户空间：0x00000000 - 0xBFFFFFFF (0 - 3GB) */
-    /* 内核空间：0xC0000000 - 0xFFFFFFFF (3GB - 4GB) */
-    
-    return va < 0xC0000000;
-}
-
-/*
- * 检查缓冲区是否完全在用户空间
- */
-bool is_user_buffer(const void *buf, size_t size)
-{
-    if (!buf) {
-        return false;
-    }
-    
-    uint32_t start = (uint32_t)buf;
-    uint32_t end = start + size - 1;
-    
-    /* 防止溢出到内核空间 */
-    if (end < start) {
-        return false;
-    }
-    
-    return is_user_address(buf) && is_user_address((void*)end);
-}
+extern bool is_user_address(const void *addr);
+extern bool is_user_buffer(const void *buf, size_t size);
 
 /* ========== 系统调用分发 ========== */
 
