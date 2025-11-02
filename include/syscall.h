@@ -39,6 +39,9 @@
 #define SYS_getppid     64
 #define SYS_setsid      66
 #define SYS_sigaction   67
+#define SYS_kill        37  /* POSIX kill() */
+#define SYS_pause       29  /* POSIX pause() */
+#define SYS_sigprocmask 126 /* POSIX sigprocmask() - RT signal base */
 #define SYS_readdir     89
 #define SYS_mmap        90
 #define SYS_munmap      91

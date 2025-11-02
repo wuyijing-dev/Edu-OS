@@ -284,8 +284,21 @@ static int handle_page_fault(struct interrupt_frame *frame)
     
     if (proc) {
         kprintf("  Terminating process...\n");
-        proc->state = PROCESS_STATE_TERMINATED;
-        proc->exit_code = -11;  /* SIGSEGV */
+        
+        /* POSIX：发送SIGSEGV信号 */
+        extern int send_signal_to_process(struct process *proc, int sig);
+        send_signal_to_process(proc, 11);  /* SIGSEGV */
+        
+        /* 处理信号（可能终止进程或调用信号处理器） */
+        extern void handle_signals(struct process *proc);
+        handle_signals(proc);
+        
+        /* 如果信号处理器返回，进程会继续；否则已被终止 */
+        if (proc->state != PROCESS_STATE_TERMINATED) {
+            /* 强制终止 */
+            proc->state = PROCESS_STATE_TERMINATED;
+            proc->exit_code = 11;  /* SIGSEGV */
+        }
         
         /* 关键：在调度前必须enable scheduler，否则schedule()会直接返回
          * 注意：此时我们在exception_handler中，scheduler已被disable（第335行）

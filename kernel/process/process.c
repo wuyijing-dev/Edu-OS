@@ -189,6 +189,11 @@ struct process *process_create_kernel_thread(
     proc->time_slice_remaining = 10;
     proc->start_time = timer_get_ticks();
     
+    /* POSIX：初始化errno和信号 */
+    proc->errno = 0;
+    extern void init_process_signals(struct process *proc);
+    init_process_signals(proc);
+    
     /* MLFQ相关 */
     proc->mlfq_level = 0;  /* 新进程从最高优先级开始 */
     

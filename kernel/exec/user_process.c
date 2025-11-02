@@ -116,6 +116,11 @@ pid_t create_user_process(const char *name, const char *elf_path)
     proc->priority = 120;  // 普通优先级
     proc->vma_list = NULL;  // 初始化VMA链表
     
+    /* POSIX：初始化errno和信号 */
+    proc->errno = 0;
+    extern void init_process_signals(struct process *proc);
+    init_process_signals(proc);
+    
     /* 5. 创建独立页表 */
     proc->page_dir = create_user_page_directory();
     if (!proc->page_dir) {

@@ -90,6 +90,15 @@ struct process {
     /* 文件管理（Linux风格：每个进程独立的FD表）*/
     struct file_descriptor_table *fd_table;  /* 文件描述符表 */
     
+    /* POSIX标准：errno错误码（每进程独立） */
+    int errno;                      /* 最后一次系统调用的错误码 */
+    
+    /* POSIX标准：信号管理 */
+    uint32_t pending_signals;       /* 待处理的信号位图（简化版：32个信号） */
+    uint32_t blocked_signals;       /* 被阻塞的信号位图 */
+    void *signal_handlers[32];      /* 信号处理函数数组 */
+    uint32_t signal_flags[32];      /* 信号标志数组 */
+    
     /* 调度信息（基本） */
     uint32_t time_slice;            /* 时间片（tick数） */
     uint32_t time_used;             /* 已使用时间 */

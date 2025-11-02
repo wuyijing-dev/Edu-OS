@@ -71,6 +71,7 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/process/mlfq_sched.c \
 	$(KERNEL_DIR)/process/fork.c \
 	$(KERNEL_DIR)/process/exec.c \
+	$(KERNEL_DIR)/process/signal.c \
 	$(KERNEL_DIR)/fs/vfs_core.c \
 	$(KERNEL_DIR)/fs/vfs_buffer.c \
 	$(KERNEL_DIR)/fs/directory.c \
@@ -98,6 +99,9 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/syscall/sys_process.c \
 	$(KERNEL_DIR)/syscall/sys_mem.c \
 	$(KERNEL_DIR)/syscall/sys_time.c \
+	$(KERNEL_DIR)/syscall/errno.c \
+	$(KERNEL_DIR)/syscall/sys_fd.c \
+	$(KERNEL_DIR)/ipc/pipe.c \
 	$(KERNEL_DIR)/net/netdev.c \
 	$(KERNEL_DIR)/net/ethernet.c \
 	$(KERNEL_DIR)/net/ip.c \
@@ -340,6 +344,10 @@ $(BUILD_DIR)/exec.o: $(KERNEL_DIR)/process/exec.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (Exec)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD_DIR)/signal.o: $(KERNEL_DIR)/process/signal.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (POSIX Signal)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
 # 第7章新增的VFS和DevFS文件
 $(BUILD_DIR)/vfs_core.o: $(KERNEL_DIR)/fs/vfs_core.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (VFS Core)$(NC)"
@@ -450,6 +458,18 @@ $(BUILD_DIR)/sys_mem.o: $(KERNEL_DIR)/syscall/sys_mem.c | $(BUILD_DIR)
 
 $(BUILD_DIR)/sys_time.o: $(KERNEL_DIR)/syscall/sys_time.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (Syscall Time)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/errno.o: $(KERNEL_DIR)/syscall/errno.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (POSIX errno)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/sys_fd.o: $(KERNEL_DIR)/syscall/sys_fd.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (FD Operations)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/pipe.o: $(KERNEL_DIR)/ipc/pipe.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (POSIX Pipe)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # 网络子系统

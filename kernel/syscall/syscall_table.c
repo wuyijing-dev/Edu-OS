@@ -6,6 +6,7 @@
 
 #include <syscall.h>
 #include <types.h>
+#include <signal.h>
 
 /* 外部系统调用函数声明 */
 
@@ -16,6 +17,19 @@ extern int sys_execve(const char *path, char *const argv[], char *const envp[]);
 extern int sys_getpid(void);
 extern int sys_getppid(void);
 extern int sys_waitpid(pid_t pid, int *status, int options);
+
+/* 信号管理（POSIX） */
+extern int sys_kill(pid_t pid, int sig);
+extern int sys_sigaction(int signum, const struct sigaction *act, struct sigaction *oldact);
+extern int sys_sigprocmask(int how, const sigset_t *set, sigset_t *oldset);
+extern int sys_pause(void);
+extern void *sys_signal(int signum, void *handler);
+
+/* 文件描述符操作（POSIX） */
+extern int sys_dup(int oldfd);
+extern int sys_dup2(int oldfd, int newfd);
+extern int sys_pipe(int pipefd[2]);
+extern int sys_fcntl(int fd, int cmd, unsigned long arg);
 
 /* 时间 */
 extern int sys_time(uint32_t *tloc);
@@ -63,11 +77,20 @@ syscall_func_t syscall_table[MAX_SYSCALLS] = {
     [SYS_time]      = (syscall_func_t)sys_time,       /* 13 */
     [SYS_lseek]     = (syscall_func_t)sys_lseek,      /* 19 */
     [SYS_getpid]    = (syscall_func_t)sys_getpid,     /* 20 */
+    [SYS_pause]     = (syscall_func_t)sys_pause,      /* 29 - POSIX暂停 */
+    [SYS_kill]      = (syscall_func_t)sys_kill,       /* 37 - POSIX信号发送 */
     [SYS_mkdir]     = (syscall_func_t)sys_mkdir,      /* 39 */
     [SYS_rmdir]     = (syscall_func_t)sys_rmdir,      /* 40 */
+    [SYS_dup]       = (syscall_func_t)sys_dup,        /* 41 - POSIX dup */
+    [SYS_pipe]      = (syscall_func_t)sys_pipe,       /* 42 - POSIX pipe */
     [SYS_brk]       = (syscall_func_t)sys_brk,        /* 45 */
+    [SYS_signal]    = (syscall_func_t)sys_signal,     /* 48 - POSIX信号 */
+    [SYS_fcntl]     = (syscall_func_t)sys_fcntl,      /* 55 - POSIX文件控制 */
+    [SYS_dup2]      = (syscall_func_t)sys_dup2,       /* 63 - POSIX dup2 */
     [SYS_getppid]   = (syscall_func_t)sys_getppid,    /* 64 */
+    [SYS_sigaction] = (syscall_func_t)sys_sigaction,  /* 67 - POSIX信号动作 */
     [SYS_mmap]      = (syscall_func_t)sys_mmap,       /* 90 */
     [SYS_munmap]    = (syscall_func_t)sys_munmap,     /* 91 */
+    [SYS_sigprocmask] = (syscall_func_t)sys_sigprocmask, /* 126 - POSIX信号掩码 */
 };
 
