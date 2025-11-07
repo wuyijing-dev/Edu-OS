@@ -109,6 +109,18 @@ void kernel_main(void)
     extern int swap_init(void);
     swap_init();
     
+    /* 初始化消息队列系统 */
+    extern void mqueue_init(void);
+    mqueue_init();
+    
+    /* 初始化信号量系统 */
+    extern void semaphore_init(void);
+    semaphore_init();
+    
+    /* 初始化互斥锁系统 */
+    extern void mutex_init_system(void);
+    mutex_init_system();
+    
     /* 初始化VFS缓冲区池（避免Page Fault中的内存分配）*/
     extern void vfs_buffer_init(void);
     vfs_buffer_init();

@@ -27,6 +27,9 @@ struct wait_queue_head {
     uint32_t lock;                      /* 自旋锁保护 */
 };
 
+/* 类型别名（Linux风格）*/
+typedef struct wait_queue_head wait_queue_head_t;
+
 /**
  * 初始化等待队列头
  */

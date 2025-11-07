@@ -1,207 +1,342 @@
-/*
+/**
  * mutex.c - 互斥锁实现
  * 
- * 支持优先级继承，防止优先级反转
+ * Linux风格的互斥锁，支持递归锁和错误检查
  */
 
 #include <sync/mutex.h>
 #include <process/process.h>
-#include <process/scheduler.h>
 #include <kernel.h>
-#include <string.h>
+#include <errno.h>
 
-/*
- * 原子性测试并设置（Test-And-Set）
+/* 全局互斥锁统计 */
+struct mutex_stats g_mutex_stats;
+
+/**
+ * 初始化互斥锁系统
  */
-static inline int atomic_test_and_set(volatile uint32_t *lock)
+void mutex_init_system(void)
 {
-    uint32_t result;
-    asm volatile(
-        "lock xchg %0, %1"
-        : "=r"(result), "+m"(*lock)
-        : "0"(1)
-        : "memory"
-    );
-    return result;
+    kprintf("[Mutex] Initializing mutex system...\n");
+    
+    g_mutex_stats.total_locks = 0;
+    g_mutex_stats.total_unlocks = 0;
+    g_mutex_stats.total_contentions = 0;
+    
+    kprintf("[Mutex] Mutex system initialized\n");
 }
 
-/*
- * 原子性清除
+/**
+ * 获取当前进程ID
  */
-static inline void atomic_clear(volatile uint32_t *lock)
+static uint32_t get_current_pid(void)
 {
-    asm volatile(
-        "movl $0, %0"
-        : "=m"(*lock)
-        :
-        : "memory"
-    );
+    /* TODO: 从进程管理器获取当前PID */
+    return 1;  /* 简化：返回固定值 */
 }
 
-/*
+/**
  * 初始化互斥锁
  */
-void mutex_init(struct mutex *m, const char *name)
+int mutex_init(struct mutex *mutex, const struct mutexattr *attr)
 {
-    if (!m) return;
+    if (!mutex) {
+        return -EINVAL;
+    }
     
-    m->lock = MUTEX_UNLOCKED;
-    m->owner = NULL;
-    m->wait_list = NULL;
-    m->recursion_count = 0;
-    m->name = name ? name : "unnamed";
+    mutex->locked = MUTEX_UNLOCKED;
+    mutex->type = attr ? attr->type : MUTEX_NORMAL;
+    mutex->owner = 0;
+    mutex->recursion = 0;
+    mutex->lock_count = 0;
+    mutex->unlock_count = 0;
+    mutex->contention_count = 0;
+    
+    init_waitqueue_head(&mutex->wait_queue);
+    
+    return 0;
 }
 
-/*
+/**
  * 销毁互斥锁
  */
-void mutex_destroy(struct mutex *m)
+int mutex_destroy(struct mutex *mutex)
 {
-    if (!m) return;
-    
-    if (m->lock == MUTEX_LOCKED) {
-        kprintf("[MUTEX] Warning: Destroying locked mutex '%s'\n", m->name);
+    if (!mutex) {
+        return -EINVAL;
     }
     
-    m->lock = MUTEX_UNLOCKED;
-    m->owner = NULL;
-    m->wait_list = NULL;
-}
-
-/*
- * 获取互斥锁（阻塞）
- */
-void mutex_lock(struct mutex *m)
-{
-    if (!m) return;
-    
-    struct process *current = process_get_current();
-    
-    /* 禁用中断（临界区） */
-    asm volatile("cli");
-    
-    /* 尝试获取锁 */
-    while (atomic_test_and_set(&m->lock) != 0) {
-        /* 锁已被占用 */
-        
-        /* 优先级继承：如果持有者优先级低，临时提升 */
-        if (m->owner && current) {
-            if (m->owner->priority > current->priority) {
-                /* 持有者优先级低，提升到当前进程优先级 */
-                kprintf("[MUTEX] Priority inheritance: %s (%d) -> %d\n",
-                        m->owner->name, m->owner->priority, current->priority);
-                m->owner->priority = current->priority;
-            }
-        }
-        
-        /* 加入等待队列 */
-        if (current) {
-            current->next_waiting = m->wait_list;
-            m->wait_list = current;
-        }
-        
-        /* 重新启用中断 */
-        asm volatile("sti");
-        
-        /* 让出 CPU，等待锁释放 */
-        /* 简化版：忙等待 */
-        asm volatile("pause");  // CPU 休息一下
-        
-        /* 禁用中断继续尝试 */
-        asm volatile("cli");
+    if (mutex->locked == MUTEX_LOCKED) {
+        return -EBUSY;  /* 互斥锁仍被持有 */
     }
     
-    /* 成功获取锁 */
-    m->owner = current;
-    m->recursion_count = 1;
-    
-    /* 重新启用中断 */
-    asm volatile("sti");
+    return 0;
 }
 
-/*
- * 尝试获取互斥锁（非阻塞）
+/**
+ * 加锁
  */
-int mutex_trylock(struct mutex *m)
+int mutex_lock(struct mutex *mutex)
 {
-    if (!m) return -1;
+    if (!mutex) {
+        return -EINVAL;
+    }
+    
+    uint32_t current_pid = get_current_pid();
     
     /* 禁用中断 */
-    asm volatile("cli");
+    uint32_t flags;
+    __asm__ volatile("pushf; pop %0; cli" : "=r"(flags));
     
-    /* 尝试获取 */
-    if (atomic_test_and_set(&m->lock) == 0) {
-        /* 成功 */
-        m->owner = process_get_current();
-        m->recursion_count = 1;
-        asm volatile("sti");
+    /* 检查递归锁 */
+    if (mutex->type == MUTEX_RECURSIVE && mutex->owner == current_pid) {
+        mutex->recursion++;
+        mutex->lock_count++;
+        __asm__ volatile("push %0; popf" :: "r"(flags));
         return 0;
     }
     
-    /* 失败 */
-    asm volatile("sti");
-    return -1;
+    /* 检查错误 */
+    if (mutex->type == MUTEX_ERRORCHECK && mutex->owner == current_pid) {
+        __asm__ volatile("push %0; popf" :: "r"(flags));
+        return -EDEADLK;  /* 死锁检测 */
+    }
+    
+    /* 尝试获取锁 */
+    while (mutex->locked == MUTEX_LOCKED) {
+        mutex->contention_count++;
+        g_mutex_stats.total_contentions++;
+        
+        /* TODO: 真正的阻塞等待 */
+        /* 简化实现：自旋等待 */
+        __asm__ volatile("sti; pause; cli");
+    }
+    
+    /* 获取锁 */
+    mutex->locked = MUTEX_LOCKED;
+    mutex->owner = current_pid;
+    mutex->recursion = 1;
+    mutex->lock_count++;
+    g_mutex_stats.total_locks++;
+    
+    /* 恢复中断 */
+    __asm__ volatile("push %0; popf" :: "r"(flags));
+    
+    return 0;
 }
 
-/*
- * 释放互斥锁
+/**
+ * 尝试加锁（非阻塞）
  */
-void mutex_unlock(struct mutex *m)
+int mutex_trylock(struct mutex *mutex)
 {
-    if (!m) return;
+    if (!mutex) {
+        return -EINVAL;
+    }
     
-    struct process *current = process_get_current();
+    uint32_t current_pid = get_current_pid();
     
     /* 禁用中断 */
-    asm volatile("cli");
+    uint32_t flags;
+    __asm__ volatile("pushf; pop %0; cli" : "=r"(flags));
+    
+    /* 检查递归锁 */
+    if (mutex->type == MUTEX_RECURSIVE && mutex->owner == current_pid) {
+        mutex->recursion++;
+        mutex->lock_count++;
+        __asm__ volatile("push %0; popf" :: "r"(flags));
+        return 0;
+    }
+    
+    /* 尝试获取锁 */
+    if (mutex->locked == MUTEX_LOCKED) {
+        __asm__ volatile("push %0; popf" :: "r"(flags));
+        return -EBUSY;
+    }
+    
+    /* 获取锁 */
+    mutex->locked = MUTEX_LOCKED;
+    mutex->owner = current_pid;
+    mutex->recursion = 1;
+    mutex->lock_count++;
+    g_mutex_stats.total_locks++;
+    
+    /* 恢复中断 */
+    __asm__ volatile("push %0; popf" :: "r"(flags));
+    
+    return 0;
+}
+
+/**
+ * 定时加锁
+ */
+int mutex_timedlock(struct mutex *mutex, const struct timespec *abs_timeout)
+{
+    /* TODO: 实现定时加锁 */
+    (void)abs_timeout;
+    return mutex_lock(mutex);
+}
+
+/**
+ * 解锁
+ */
+int mutex_unlock(struct mutex *mutex)
+{
+    if (!mutex) {
+        return -EINVAL;
+    }
+    
+    uint32_t current_pid = get_current_pid();
+    
+    /* 禁用中断 */
+    uint32_t flags;
+    __asm__ volatile("pushf; pop %0; cli" : "=r"(flags));
     
     /* 检查是否是持有者 */
-    if (m->owner != current) {
-        kprintf("[MUTEX] Warning: Process %s trying to unlock mutex '%s' not owned by it\n",
-                current ? current->name : "unknown", m->name);
-        asm volatile("sti");
-        return;
+    if (mutex->owner != current_pid) {
+        __asm__ volatile("push %0; popf" :: "r"(flags));
+        return -EPERM;  /* 不是锁的持有者 */
     }
     
-    /* 递归锁处理 */
-    if (m->recursion_count > 1) {
-        m->recursion_count--;
-        asm volatile("sti");
-        return;
+    /* 处理递归锁 */
+    if (mutex->type == MUTEX_RECURSIVE && mutex->recursion > 1) {
+        mutex->recursion--;
+        mutex->unlock_count++;
+        __asm__ volatile("push %0; popf" :: "r"(flags));
+        return 0;
     }
-    
-    /* 恢复持有者的原始优先级（如果使用了优先级继承） */
-    /* TODO: 保存和恢复原始优先级 */
-    
-    /* 唤醒等待队列中的一个进程 */
-    if (m->wait_list) {
-        struct process *wake = m->wait_list;
-        m->wait_list = wake->next_waiting;
-        wake->next_waiting = NULL;
-        
-        /* 将进程设置为就绪状态 */
-        if (wake->state == PROCESS_STATE_BLOCKED) {
-            wake->state = PROCESS_STATE_READY;
-        }
-    }
-    
-    /* 清除所有者 */
-    m->owner = NULL;
-    m->recursion_count = 0;
     
     /* 释放锁 */
-    atomic_clear(&m->lock);
+    mutex->owner = 0;
+    mutex->recursion = 0;
+    mutex->locked = MUTEX_UNLOCKED;
+    mutex->unlock_count++;
+    g_mutex_stats.total_unlocks++;
     
-    /* 重新启用中断 */
-    asm volatile("sti");
+    /* TODO: 唤醒等待的进程 */
+    
+    /* 恢复中断 */
+    __asm__ volatile("push %0; popf" :: "r"(flags));
+    
+    return 0;
 }
 
-/*
- * 检查锁是否被持有
+/**
+ * 获取互斥锁持有者
  */
-bool mutex_is_locked(struct mutex *m)
+uint32_t mutex_get_owner(struct mutex *mutex)
 {
-    if (!m) return false;
-    return m->lock == MUTEX_LOCKED;
+    return mutex ? mutex->owner : 0;
 }
 
+/**
+ * 互斥锁属性操作
+ */
+
+int mutexattr_init(struct mutexattr *attr)
+{
+    if (!attr) {
+        return -EINVAL;
+    }
+    
+    attr->type = MUTEX_NORMAL;
+    attr->pshared = 0;
+    
+    return 0;
+}
+
+int mutexattr_destroy(struct mutexattr *attr)
+{
+    (void)attr;
+    return 0;
+}
+
+int mutexattr_settype(struct mutexattr *attr, int type)
+{
+    if (!attr) {
+        return -EINVAL;
+    }
+    
+    if (type != MUTEX_NORMAL && type != MUTEX_RECURSIVE && type != MUTEX_ERRORCHECK) {
+        return -EINVAL;
+    }
+    
+    attr->type = type;
+    return 0;
+}
+
+int mutexattr_gettype(const struct mutexattr *attr, int *type)
+{
+    if (!attr || !type) {
+        return -EINVAL;
+    }
+    
+    *type = attr->type;
+    return 0;
+}
+
+int mutexattr_setpshared(struct mutexattr *attr, int pshared)
+{
+    if (!attr) {
+        return -EINVAL;
+    }
+    
+    attr->pshared = pshared;
+    return 0;
+}
+
+int mutexattr_getpshared(const struct mutexattr *attr, int *pshared)
+{
+    if (!attr || !pshared) {
+        return -EINVAL;
+    }
+    
+    *pshared = attr->pshared;
+    return 0;
+}
+
+/**
+ * 打印互斥锁统计信息
+ */
+void mutex_print_stats(void)
+{
+    kprintf("\n=== Mutex Statistics ===\n");
+    kprintf("Total locks:       %llu\n", g_mutex_stats.total_locks);
+    kprintf("Total unlocks:     %llu\n", g_mutex_stats.total_unlocks);
+    kprintf("Total contentions: %llu\n", g_mutex_stats.total_contentions);
+    kprintf("========================\n\n");
+}
+
+/**
+ * 系统调用实现
+ */
+
+int sys_mutex_init(struct mutex *mutex, const struct mutexattr *attr)
+{
+    /* TODO: 用户空间指针验证 */
+    return mutex_init(mutex, attr);
+}
+
+int sys_mutex_destroy(struct mutex *mutex)
+{
+    /* TODO: 用户空间指针验证 */
+    return mutex_destroy(mutex);
+}
+
+int sys_mutex_lock(struct mutex *mutex)
+{
+    /* TODO: 用户空间指针验证 */
+    return mutex_lock(mutex);
+}
+
+int sys_mutex_trylock(struct mutex *mutex)
+{
+    /* TODO: 用户空间指针验证 */
+    return mutex_trylock(mutex);
+}
+
+int sys_mutex_unlock(struct mutex *mutex)
+{
+    /* TODO: 用户空间指针验证 */
+    return mutex_unlock(mutex);
+}

@@ -112,7 +112,10 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/syscall/sys_shm.c \
 	$(KERNEL_DIR)/syscall/sys_mlock.c \
 	$(KERNEL_DIR)/ipc/pipe.c \
+	$(KERNEL_DIR)/ipc/mqueue.c \
 	$(KERNEL_DIR)/ipc/shm.c \
+	$(KERNEL_DIR)/sync/semaphore.c \
+	$(KERNEL_DIR)/sync/mutex.c \
 	$(KERNEL_DIR)/input/input_core.c \
 	$(KERNEL_DIR)/input/input_devfs.c \
 	$(KERNEL_DIR)/sync/wait_queue.c \
@@ -123,8 +126,6 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/exec/elf_exec.c \
 	$(KERNEL_DIR)/exec/usermode.c \
 	$(KERNEL_DIR)/exec/user_process.c \
-	$(KERNEL_DIR)/sync/mutex.c \
-	$(KERNEL_DIR)/sync/semaphore.c \
 	$(KERNEL_DIR)/sync/spinlock.c \
 	$(LIB_DIR)/string.c \
 	$(LIB_DIR)/libgcc_compat.c \
@@ -489,6 +490,10 @@ $(BUILD_DIR)/sys_io.o: $(KERNEL_DIR)/syscall/sys_io.c | $(BUILD_DIR)
 
 $(BUILD_DIR)/sys_mlock.o: $(KERNEL_DIR)/syscall/sys_mlock.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (mlock/munlock)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/mqueue.o: $(KERNEL_DIR)/ipc/mqueue.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (Message Queue)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/sys_process.o: $(KERNEL_DIR)/syscall/sys_process.c | $(BUILD_DIR)
