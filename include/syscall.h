@@ -68,6 +68,14 @@
 #define SYS_shm_open        305  /* POSIX shm_open() */
 #define SYS_shm_unlink      306  /* POSIX shm_unlink() */
 
+/* 优先级和调度相关系统调用 */
+#define SYS_nice            34   /* POSIX nice() */
+#define SYS_getpriority     96   /* POSIX getpriority() */
+#define SYS_setpriority     97   /* POSIX setpriority() */
+#define SYS_sched_setscheduler  156  /* POSIX sched_setscheduler() */
+#define SYS_sched_getscheduler  157  /* POSIX sched_getscheduler() */
+#define SYS_sched_yield     158  /* POSIX sched_yield() */
+
 /* 最大系统调用号 */
 #define MAX_SYSCALLS    512
 

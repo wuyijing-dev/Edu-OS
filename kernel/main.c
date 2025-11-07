@@ -121,6 +121,18 @@ void kernel_main(void)
     extern void mutex_init_system(void);
     mutex_init_system();
     
+    /* 初始化CFS调度器 */
+    extern void cfs_init(void);
+    cfs_init();
+    
+    /* 初始化实时调度器 */
+    extern void rt_sched_init(void);
+    rt_sched_init();
+    
+    /* 初始化/proc/schedstat */
+    extern void proc_schedstat_init(void);
+    proc_schedstat_init();
+    
     /* 初始化VFS缓冲区池（避免Page Fault中的内存分配）*/
     extern void vfs_buffer_init(void);
     vfs_buffer_init();

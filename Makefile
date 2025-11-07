@@ -74,6 +74,8 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/process/scheduler.c \
 	$(KERNEL_DIR)/process/priority_sched.c \
 	$(KERNEL_DIR)/process/mlfq_sched.c \
+	$(KERNEL_DIR)/process/cfs_sched.c \
+	$(KERNEL_DIR)/process/rt_sched.c \
 	$(KERNEL_DIR)/process/fork.c \
 	$(KERNEL_DIR)/process/exec.c \
 	$(KERNEL_DIR)/process/signal.c \
@@ -89,6 +91,7 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/fs/procfs.c \
 	$(KERNEL_DIR)/fs/proc_cpuinfo.c \
 	$(KERNEL_DIR)/fs/proc_meminfo.c \
+	$(KERNEL_DIR)/fs/proc_schedstat.c \
 	$(KERNEL_DIR)/fs/proc_uptime.c \
 	$(KERNEL_DIR)/fs/proc_version.c \
 	$(KERNEL_DIR)/fs/proc_pid.c \
@@ -111,6 +114,7 @@ KERNEL_C_FILES := \
 	$(KERNEL_DIR)/syscall/sys_select.c \
 	$(KERNEL_DIR)/syscall/sys_shm.c \
 	$(KERNEL_DIR)/syscall/sys_mlock.c \
+	$(KERNEL_DIR)/syscall/sys_nice.c \
 	$(KERNEL_DIR)/ipc/pipe.c \
 	$(KERNEL_DIR)/ipc/mqueue.c \
 	$(KERNEL_DIR)/ipc/shm.c \
@@ -372,6 +376,14 @@ $(BUILD_DIR)/priority_sched.o: $(KERNEL_DIR)/process/priority_sched.c | $(BUILD_
 	@echo -e "$(BLUE)编译 $< (Priority Scheduler)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD_DIR)/cfs_sched.o: $(KERNEL_DIR)/process/cfs_sched.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (CFS Scheduler)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/rt_sched.o: $(KERNEL_DIR)/process/rt_sched.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (RT Scheduler)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(BUILD_DIR)/mlfq_sched.o: $(KERNEL_DIR)/process/mlfq_sched.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (MLFQ Scheduler)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -428,6 +440,10 @@ $(BUILD_DIR)/dev_mouse.o: $(KERNEL_DIR)/fs/dev_mouse.c | $(BUILD_DIR)
 # 第9章新增的ProcFS文件
 $(BUILD_DIR)/procfs.o: $(KERNEL_DIR)/fs/procfs.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (ProcFS Core)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/proc_schedstat.o: $(KERNEL_DIR)/fs/proc_schedstat.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (ProcFS SchedStat)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/proc_cpuinfo.o: $(KERNEL_DIR)/fs/proc_cpuinfo.c | $(BUILD_DIR)
@@ -490,6 +506,10 @@ $(BUILD_DIR)/sys_io.o: $(KERNEL_DIR)/syscall/sys_io.c | $(BUILD_DIR)
 
 $(BUILD_DIR)/sys_mlock.o: $(KERNEL_DIR)/syscall/sys_mlock.c | $(BUILD_DIR)
 	@echo -e "$(BLUE)编译 $< (mlock/munlock)$(NC)"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/sys_nice.o: $(KERNEL_DIR)/syscall/sys_nice.c | $(BUILD_DIR)
+	@echo -e "$(BLUE)编译 $< (Nice/Priority)$(NC)"
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/mqueue.o: $(KERNEL_DIR)/ipc/mqueue.c | $(BUILD_DIR)

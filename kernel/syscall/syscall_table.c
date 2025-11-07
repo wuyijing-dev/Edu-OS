@@ -73,6 +73,14 @@ extern int sys_ftruncate(int fd, off_t length);
 extern int sys_shm_open(const char *name, int oflag, mode_t mode);
 extern int sys_shm_unlink(const char *name);
 
+/* 优先级和调度相关 */
+extern int sys_nice(int increment);
+extern int sys_getpriority(int which, int who);
+extern int sys_setpriority(int which, int who, int prio);
+extern int sys_sched_setscheduler(pid_t pid, int policy, const void *param);
+extern int sys_sched_getscheduler(pid_t pid);
+extern int sys_sched_yield(void);
+
 /* ========== 系统调用表 ========== */
 
 /*
@@ -98,10 +106,13 @@ syscall_func_t syscall_table[MAX_SYSCALLS] = {
     [SYS_lseek]     = (syscall_func_t)sys_lseek,      /* 19 */
     [SYS_getpid]    = (syscall_func_t)sys_getpid,     /* 20 */
     [SYS_pause]     = (syscall_func_t)sys_pause,      /* 29 - POSIX暂停 */
+    [SYS_nice]      = (syscall_func_t)sys_nice,       /* 34 - POSIX nice */
     [SYS_kill]      = (syscall_func_t)sys_kill,       /* 37 - POSIX信号发送 */
     [SYS_gettimeofday] = (syscall_func_t)sys_gettimeofday, /* 78 - POSIX时间 */
     [SYS_select]    = (syscall_func_t)sys_select,     /* 82 - POSIX select */
     [SYS_mkdir]     = (syscall_func_t)sys_mkdir,      /* 39 */
+    [SYS_getpriority] = (syscall_func_t)sys_getpriority, /* 96 - POSIX getpriority */
+    [SYS_setpriority] = (syscall_func_t)sys_setpriority, /* 97 - POSIX setpriority */
     [SYS_rmdir]     = (syscall_func_t)sys_rmdir,      /* 40 */
     [SYS_dup]       = (syscall_func_t)sys_dup,        /* 41 - POSIX dup */
     [SYS_pipe]      = (syscall_func_t)sys_pipe,       /* 42 - POSIX pipe */
@@ -119,6 +130,9 @@ syscall_func_t syscall_table[MAX_SYSCALLS] = {
     [SYS_lstat]     = (syscall_func_t)sys_lstat,      /* 107 - POSIX lstat */
     [SYS_fstat]     = (syscall_func_t)sys_fstat,      /* 108 - POSIX fstat */
     [SYS_sigprocmask] = (syscall_func_t)sys_sigprocmask, /* 126 - POSIX信号掩码 */
+    [SYS_sched_setscheduler] = (syscall_func_t)sys_sched_setscheduler, /* 156 */
+    [SYS_sched_getscheduler] = (syscall_func_t)sys_sched_getscheduler, /* 157 */
+    [SYS_sched_yield] = (syscall_func_t)sys_sched_yield, /* 158 */
     [SYS_nanosleep] = (syscall_func_t)sys_nanosleep,  /* 162 - POSIX sleep */
     [SYS_poll]      = (syscall_func_t)sys_poll,       /* 168 - POSIX poll */
     [SYS_shm_open]  = (syscall_func_t)sys_shm_open,   /* 305 - POSIX shm_open */

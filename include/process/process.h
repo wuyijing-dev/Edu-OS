@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <mm/vmm.h>
+#include <rbtree.h>
 
 /* 前向声明 */
 struct vma;
@@ -38,6 +39,7 @@ struct sched_entity {
     uint64_t exec_start;            /* 本次执行开始时间 */
     uint64_t sum_exec_runtime;      /* 累计执行时间 */
     int weight;                     /* 权重（基于nice值） */
+    struct rb_node rb_node;         /* 红黑树节点（用于CFS队列） */
 };
 
 /* CPU上下文（进程切换时保存的寄存器） */

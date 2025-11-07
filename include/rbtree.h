@@ -198,5 +198,13 @@ static inline void rb_link_node(struct rb_node *node, struct rb_node *parent,
                                          typeof(*pos), member); 1; }); \
          pos = n)
 
+/* 清除节点（设置为未链接状态）*/
+#define RB_CLEAR_NODE(node) \
+    ((node)->__rb_parent_color = (unsigned long)(node))
+
+/* 检查节点是否为空（未链接）*/
+#define RB_EMPTY_NODE(node) \
+    ((node)->__rb_parent_color == (unsigned long)(node))
+
 #endif /* _RBTREE_H */
 
