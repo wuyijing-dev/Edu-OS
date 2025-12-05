@@ -80,16 +80,16 @@ static void update_schedstat(void)
     remaining -= written;
     
     /* 遍历所有进程 */
-    extern struct list_head process_list_head;
+    extern struct process *process_list_head;  /* EduOS使用简单双向链表 */
     struct process *proc;
     int process_count = 0;
     int running_count = 0;
     int ready_count = 0;
     int blocked_count = 0;
     
-    struct list_head *pos;
-    list_for_each(pos, &process_list_head) {
-        proc = container_of(pos, struct process, next);
+    /* 收集每个进程的详细信息 */
+    proc = process_list_head;
+    while (proc) {
         process_count++;
         switch (proc->state) {
             case PROCESS_STATE_RUNNING:
@@ -104,6 +104,7 @@ static void update_schedstat(void)
             default:
                 break;
         }
+        proc = proc->next;  /* 移动到下一个进程 */
     }
     
     written = snprintf(buf, remaining,
@@ -126,7 +127,8 @@ static void update_schedstat(void)
     buf += written;
     remaining -= written;
     
-    list_for_each_entry(proc, &process_list_head, next) {
+    proc = process_list_head;
+    while (proc) {
         const char *state_str;
         switch (proc->state) {
             case PROCESS_STATE_NEW:        state_str = "NEW"; break;
@@ -163,6 +165,8 @@ static void update_schedstat(void)
         
         buf += written;
         remaining -= written;
+        
+        proc = proc->next;  /* 移动到下一个进程 */
     }
     
     written = snprintf(buf, remaining,
@@ -176,28 +180,27 @@ static void update_schedstat(void)
 /**
  * 读取 /proc/schedstat
  */
-static ssize_t proc_schedstat_read(struct vfs_file *file, void *buffer, 
-                                   size_t count, off_t *offset)
+int proc_schedstat_read(struct vfs_file *file, char *buffer, size_t count)
 {
     (void)file;
     
     /* 更新统计信息 */
-    if (*offset == 0) {
+    if (file->pos == 0) {
         update_schedstat();
     }
     
     /* 检查偏移量 */
-    if (*offset >= (off_t)schedstat_size) {
+    if (file->pos >= (off_t)schedstat_size) {
         return 0;  /* EOF */
     }
     
     /* 计算可读取的字节数 */
-    size_t available = schedstat_size - *offset;
+    size_t available = schedstat_size - file->pos;
     size_t to_read = (count < available) ? count : available;
     
     /* 复制数据到用户缓冲区 */
-    memcpy(buffer, schedstat_buffer + *offset, to_read);
-    *offset += to_read;
+    memcpy(buffer, schedstat_buffer + file->pos, to_read);
+    file->pos += to_read;
     
     return to_read;
 }
@@ -208,24 +211,15 @@ static ssize_t proc_schedstat_read(struct vfs_file *file, void *buffer,
 static struct vfs_file_operations proc_schedstat_fops = {
     .open = NULL,
     .release = NULL,
-    .read = (int (*)(struct vfs_file *, char *, size_t))proc_schedstat_read,
+    .read = proc_schedstat_read,
     .write = NULL,  /* 只读 */
     .ioctl = NULL,
     .poll = NULL,
 };
 
-/**
- * 注册 /proc/schedstat
+/*
+ * 不需要单独的初始化函数
+ * 在EduOS中，proc文件通过procfs.c中的全局文件列表自动注册
+ * 我们已经在procfs.c的global_files数组中添加了schedstat条目
  */
-void proc_schedstat_init(void)
-{
-    kprintf("[ProcFS] Registering /proc/schedstat...\n");
-    
-    /* 注册到procfs */
-    extern int procfs_register_entry(const char *name, 
-                                     struct vfs_file_operations *fops);
-    procfs_register_entry("schedstat", &proc_schedstat_fops);
-    
-    kprintf("[ProcFS] /proc/schedstat registered\n");
-}
 

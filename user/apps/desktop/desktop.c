@@ -312,7 +312,7 @@ void _start(void)
     printf("[Desktop] Screen: %dx%d\n", desktop.screen_width, desktop.screen_height);
     
     /* 打开鼠标设备 */
-    printf("[Desktop] Opening /dev/mouse...\n");
+    printf("[Desktop] Opening /mouse...\n");
     desktop.mouse_fd = open("/mouse", O_RDONLY);
     if (desktop.mouse_fd < 0) {
         printf("[Desktop] WARNING: Failed to open /mouse (fd=%d)\n", desktop.mouse_fd);

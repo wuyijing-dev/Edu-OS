@@ -32,6 +32,15 @@ static int procfs_file_write(struct vfs_file *file, const char *buf, size_t coun
 static struct vfs_dentry *procfs_lookup(struct vfs_inode *dir, const char *name);
 static int procfs_root_readdir(struct vfs_file *file, void *dirent, void *data);
 
+/* ========== 外部函数声明 ========== */
+
+/* 来自各个 proc 文件实现的外部函数 */
+extern int proc_cpuinfo_read(char *buf, size_t size, off_t *offset, void *data);
+extern int proc_meminfo_read(char *buf, size_t size, off_t *offset, void *data);
+extern int proc_uptime_read(char *buf, size_t size, off_t *offset, void *data);
+extern int proc_version_read(char *buf, size_t size, off_t *offset, void *data);
+extern int proc_schedstat_read(char *buf, size_t size, off_t *offset, void *data);
+
 /* ========== 操作表 ========== */
 
 /* Proc 文件操作表 */
@@ -212,6 +221,7 @@ static struct vfs_dentry *procfs_lookup(struct vfs_inode *dir, const char *name)
         { "meminfo",  S_IFREG | 0444, proc_meminfo_read,  NULL },
         { "uptime",   S_IFREG | 0444, proc_uptime_read,   NULL },
         { "version",  S_IFREG | 0444, proc_version_read,  NULL },
+        { "schedstat", S_IFREG | 0444, proc_schedstat_read, NULL },
         { NULL,       0,              NULL,               NULL }
     };
     

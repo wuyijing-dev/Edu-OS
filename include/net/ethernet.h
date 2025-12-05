@@ -20,8 +20,8 @@ struct ethhdr {
 } __attribute__((packed));
 
 /* 以太网帧处理 */
-int eth_type_trans(struct sk_buff *skb);
-int eth_header(struct sk_buff *skb, struct net_device *dev,
+int eth_type_trans(void *skb);
+int eth_header(void *skb, void *dev,
                uint16_t type, const void *daddr, const void *saddr, uint32_t len);
 
 #endif /* NET_ETHERNET_H */

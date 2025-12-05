@@ -129,9 +129,9 @@ void kernel_main(void)
     extern void rt_sched_init(void);
     rt_sched_init();
     
-    /* 初始化/proc/schedstat */
-    extern void proc_schedstat_init(void);
-    proc_schedstat_init();
+    /* 初始化/proc/schedstat - 通过procfs全局文件列表自动注册，无需手动初始化 */
+    /* extern void proc_schedstat_init(void); */
+    /* proc_schedstat_init(); */
     
     /* 初始化VFS缓冲区池（避免Page Fault中的内存分配）*/
     extern void vfs_buffer_init(void);

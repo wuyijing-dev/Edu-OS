@@ -128,6 +128,11 @@ int proc_uptime_read(char *buf, size_t size, off_t *offset, void *data);
  */
 int proc_version_read(char *buf, size_t size, off_t *offset, void *data);
 
+/*
+ * /proc/schedstat - 调度统计信息
+ */
+int proc_schedstat_read(char *buf, size_t size, off_t *offset, void *data);
+
 /* ========== 进程 Proc 文件接口 ========== */
 
 /*

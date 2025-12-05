@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <net/skbuff.h>
 
 /* 网络设备状态 */
 #define NETDEV_UP       0x0001  /* 设备已启动 */
@@ -16,18 +17,10 @@
 #define ETH_MTU         1500
 #define ETH_FRAME_LEN   1514    /* 最大以太网帧长度 */
 
-/* 网络数据包结构 (类似Linux sk_buff) */
-struct sk_buff {
-    struct sk_buff *next;       /* 链表指针 */
-    uint8_t *data;              /* 数据指针 */
-    uint32_t len;               /* 数据长度 */
-    uint32_t data_len;          /* 数据区总长度 */
-    uint8_t *head;              /* 缓冲区头部 */
-    uint8_t *tail;              /* 缓冲区尾部 */
-    uint8_t *end;               /* 缓冲区结束 */
-    struct net_device *dev;     /* 关联的网络设备 */
-    uint32_t protocol;          /* 协议类型 */
-};
+/* 网络数据包结构 - 使用标准skbuff.h中的定义 */
+/* struct sk_buff 定义在 skbuff.h 中 */
+
+struct net_device;
 
 /* 网络设备操作接口 (类似Linux net_device_ops) */
 struct net_device_ops {
@@ -70,8 +63,7 @@ struct net_device {
     struct net_device_stats stats;
     
     /* 接收队列 */
-    struct sk_buff *rx_queue_head;
-    struct sk_buff *rx_queue_tail;
+    struct sk_buff_head rx_queue;
     uint32_t rx_queue_len;
     
     /* 私有数据 */
@@ -81,13 +73,18 @@ struct net_device {
     struct net_device *next;
 };
 
-/* sk_buff操作函数 */
+/* sk_buff操作函数 - 使用标准skbuff.h中的定义 */
+/* 这些函数声明在skbuff.h中，这里不需要重复声明 */
+#if 0
 struct sk_buff *alloc_skb(uint32_t size);
+struct sk_buff *alloc_skb_simple(uint32_t size);
+void kfree_skb(struct sk_buff *skb);
 void free_skb(struct sk_buff *skb);
 void skb_reserve(struct sk_buff *skb, uint32_t len);
 uint8_t *skb_put(struct sk_buff *skb, uint32_t len);
 uint8_t *skb_push(struct sk_buff *skb, uint32_t len);
 uint8_t *skb_pull(struct sk_buff *skb, uint32_t len);
+#endif
 
 /* 网络设备注册/注销 */
 int register_netdev(struct net_device *dev);

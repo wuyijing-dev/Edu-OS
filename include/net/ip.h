@@ -86,12 +86,12 @@ int ip_rcv(struct sk_buff *skb);
 int ip_send(struct sk_buff *skb, uint32_t daddr, uint8_t protocol);
 
 /* ARP处理 */
-int arp_rcv(struct sk_buff *skb);
+int arp_rcv(void *skb);
 int arp_resolve(struct net_device *dev, uint32_t ip, uint8_t *mac);
 
 /* ICMP处理 */
-int icmp_rcv(struct sk_buff *skb);
-int icmp_send_echo_reply(struct sk_buff *skb);
+int icmp_rcv(void *skb);
+int icmp_send_echo_reply(void *skb);
 
 #endif /* NET_IP_H */
 

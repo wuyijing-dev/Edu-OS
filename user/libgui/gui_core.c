@@ -44,13 +44,13 @@ GuiContext *gui_init(void)
     
     /* 打开framebuffer设备 */
     printf("[gui_init] Opening /fb0...\n");
-    ctx->fb_fd = open("/fb0", 0);  /* DevFS注册在根目录，不是/dev下 */
+    ctx->fb_fd = open("/fb0", 0);  /* DevFS设备文件在根目录下 */
     if (ctx->fb_fd < 0) {
-        printf("[gui_init] ERROR: Failed to open /dev/fb0 (fd=%d)\n", ctx->fb_fd);
+        printf("[gui_init] ERROR: Failed to open /fb0 (fd=%d)\n", ctx->fb_fd);
         free(ctx);
         return NULL;
     }
-    printf("[gui_init] /dev/fb0 opened: fd=%d\n", ctx->fb_fd);
+    printf("[gui_init] /fb0 opened: fd=%d\n", ctx->fb_fd);
     
     /* 获取屏幕信息（暂时硬编码，完整版应该用ioctl） */
     ctx->width = 1024;

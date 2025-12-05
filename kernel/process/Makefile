@@ -10,3 +10,4 @@ obj-y += fork.o exec.o wait.o
 # 子目录（如果有）
 # obj-y += subdir/
 
+obj-y := entry.o trap.o sched.o process.o wait.o clone.o thread.o vfork.o

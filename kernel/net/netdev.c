@@ -3,6 +3,7 @@
  */
 
 #include <net/netdev.h>
+#include <net/skbuff.h>
 #include <net/ethernet.h>
 #include <mm/kmalloc.h>
 #include <string.h>
@@ -18,8 +19,9 @@ static uint32_t skb_pool_bitmap[SKB_POOL_SIZE / 32];
 /*
  * 分配sk_buff
  */
-struct sk_buff *alloc_skb(uint32_t size)
+struct sk_buff *alloc_skb(unsigned int size, int priority)
 {
+    (void)priority; /* 暂未使用优先级 */
     struct sk_buff *skb = NULL;
     
     /* 从内存池分配 */
@@ -50,17 +52,15 @@ struct sk_buff *alloc_skb(uint32_t size)
     skb->end = skb->head + size;
     skb->len = 0;
     skb->data_len = size;
-    skb->next = NULL;
+    /* skb->next removed, use list_head */
+    INIT_LIST_HEAD(&skb->list);
     skb->dev = NULL;
     skb->protocol = 0;
     
     return skb;
 }
 
-/*
- * 释放sk_buff
- */
-void free_skb(struct sk_buff *skb)
+void kfree_skb(struct sk_buff *skb)
 {
     if (!skb) {
         return;
@@ -75,6 +75,13 @@ void free_skb(struct sk_buff *skb)
         skb_pool_bitmap[i / 32] &= ~(1 << (i % 32));
     }
 }
+
+void free_skb(struct sk_buff *skb)
+{
+    kfree_skb(skb);
+}
+
+
 
 /*
  * 在skb头部预留空间
@@ -190,22 +197,14 @@ int netif_rx(struct sk_buff *skb)
     struct net_device *dev = skb->dev;
     
     /* 添加到接收队列 */
-    skb->next = NULL;
-    if (!dev->rx_queue_head) {
-        dev->rx_queue_head = skb;
-        dev->rx_queue_tail = skb;
-    } else {
-        dev->rx_queue_tail->next = skb;
-        dev->rx_queue_tail = skb;
-    }
-    dev->rx_queue_len++;
+    skb_queue_tail(&dev->rx_queue, skb);
     
-    /* 更新统计 */
+    /* 更新统计信息 */
     dev->stats.rx_packets++;
     dev->stats.rx_bytes += skb->len;
     
-    /* 解析以太网帧类型 */
-    eth_type_trans(skb);
+    /* 通知上层协议 */
+    /* TODO: 唤醒网络处理线程 */
     
     return 0;
 }
