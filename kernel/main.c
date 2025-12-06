@@ -8,6 +8,7 @@
 #include "string.h"
 #include "io.h"
 #include "types.h"
+#include <multiboot.h>
 #include <arch/i386/gdt.h>
 #include <arch/i386/idt.h>
 #include <arch/i386/irq.h>
@@ -54,40 +55,160 @@ extern int elf_exec(const char *path);
 /* 外部函数：进程管理 */
 extern int do_fork(void);
 
-// 内核主函数
-void kernel_main(void)
+/* Multiboot启动信息处理函数 */
+static void process_multiboot_info(uint32_t magic, struct multiboot_info *mbi)
 {
-    // 初始化VGA和串口
-    vga_init();
+    /* 检查是否是有效的Multiboot信息 */
+    if (magic == 0 || mbi == NULL) {
+        /* 不是从GRUB启动，使用默认值 */
+        kprintf("Not booted from GRUB, using defaults\n");
+        return;
+    }
+    
+    /* 支持Multiboot1和Multiboot2 */
+    if (magic != MULTIBOOT2_BOOTLOADER_MAGIC && magic != 0x2BADB002) {
+        /* 未知的magic number */
+        kprintf("Unknown bootloader magic: 0x%x\n", magic);
+        return;
+    }
+    
+    if (magic != MULTIBOOT2_BOOTLOADER_MAGIC) {
+        /* Multiboot1协议，暂不处理详细信息 */
+        kprintf("Booted with Multiboot1 protocol\n");
+        return;
+    }
+    
+    /* 遍历Multiboot2标签 */
+    struct multiboot_tag *tag = multiboot_tag_first(mbi);
+    
+    while (tag->type != MULTIBOOT_TAG_TYPE_END) {
+        switch (tag->type) {
+            case MULTIBOOT_TAG_TYPE_BOOT_LOADER_NAME: {
+                struct multiboot_tag_string *bootloader = (struct multiboot_tag_string *)tag;
+                kprintf("Bootloader: %s\n", bootloader->string);
+                break;
+            }
+            
+            case MULTIBOOT_TAG_TYPE_BASIC_MEMINFO: {
+                struct multiboot_tag_basic_meminfo *meminfo = 
+                    (struct multiboot_tag_basic_meminfo *)tag;
+                kprintf("Memory: %uKB lower, %uKB upper\n", 
+                    meminfo->mem_lower, meminfo->mem_upper);
+                break;
+            }
+            
+            case MULTIBOOT_TAG_TYPE_MMAP: {
+                struct multiboot_tag_mmap *mmap = (struct multiboot_tag_mmap *)tag;
+                kprintf("Memory Map:\n");
+                
+                struct multiboot_mmap_entry *entry = mmap->entries;
+                struct multiboot_mmap_entry *end = 
+                    (struct multiboot_mmap_entry *)((uint8_t *)mmap + mmap->tag.size);
+                
+                while (entry < end) {
+                    const char *type_str = "Unknown";
+                    if (entry->type == 1) type_str = "Available";
+                    else if (entry->type == 2) type_str = "Reserved";
+                    
+                    kprintf("  [0x%llx - 0x%llx] %s\n", 
+                        entry->addr, entry->addr + entry->len, type_str);
+                    
+                    entry = (struct multiboot_mmap_entry *)
+                        ((uint8_t *)entry + mmap->entry_size);
+                }
+                break;
+            }
+            
+            default:
+                break;
+        }
+        
+        tag = multiboot_tag_next(tag);
+    }
+}
+
+// 内核主函数（接收Multiboot启动信息）
+void kernel_main(uint32_t magic, struct multiboot_info *mbi)
+{
+    // ========== 第1步：初始化串口（最基本的调试） ==========
     serial_init(COM1);
+    serial_write_string("kernel_main started\n");
     
-    // 重新建立GDT（在内核虚拟地址空间）
-    // 必须在使用用户模式之前完成
+    // ========== 第2步：初始化VGA ==========
+    serial_write_string("Initializing VGA...\n");
+    vga_init();
+    serial_write_string("VGA initialized\n");
+    
+    // ========== 第3步：显示启动信息 ==========
+    kprintf("\n");
+    kprintf("========================================\n");
+    kprintf("EduOS Kernel Starting (GRUB2)\n");
+    kprintf("Magic: 0x%x, MBI: 0x%x\n", magic, (uint32_t)mbi);
+    kprintf("========================================\n");
+    
+    // ========== 第4步：处理Multiboot信息 ==========
+    serial_write_string("Processing Multiboot info...\n");
+    process_multiboot_info(magic, mbi);
+    serial_write_string("Multiboot info processed\n");
+    
+    // ========== 第5步：初始化GDT ==========
+    serial_write_string("Initializing GDT...\n");
+    kprintf("Initializing GDT...\n");
     gdt_init();
+    serial_write_string("GDT initialized\n");
+    kprintf("GDT initialized\n");
     
-    // 初始化中断系统（静默）
+    // ========== 第6步：初始化中断系统 ==========
+    serial_write_string("Initializing IDT...\n");
     idt_init();
+    serial_write_string("IDT initialized\n");
+    
+    serial_write_string("Initializing IRQ...\n");
     irq_init();
+    serial_write_string("IRQ initialized\n");
+    
+    serial_write_string("Initializing timer...\n");
     timer_init(TIMER_FREQUENCY_HZ);
+    serial_write_string("Timer initialized\n");
+    
+    serial_write_string("Initializing keyboard...\n");
     keyboard_init();
+    serial_write_string("Keyboard initialized\n");
+    
+    serial_write_string("Enabling IRQs...\n");
     irq_enable_all();
+    serial_write_string("IRQs enabled\n");
     
-    // ========== 第4章：初始化内存管理（静默） ==========
+    // ========== 第7步：初始化内存管理 ==========
+    serial_write_string("Initializing memory management...\n");
     
-    /* 获取内核结束地址（物理地址） */
     uint32_t kernel_end_phys = (uint32_t)&kernel_end;
+    kprintf("kernel_end_phys: 0x%x\n", kernel_end_phys);
     
-    /* 初始化物理内存管理器（假设128MB RAM） */
     uint32_t total_memory = 128 * 1024 * 1024;  // 128MB
+    serial_write_string("Initializing PMM...\n");
     pmm_init(total_memory, 0x100000, kernel_end_phys);
+    serial_write_string("PMM initialized\n");
     
-    /* 初始化虚拟内存管理器（启用分页） */
-    vmm_init(kernel_end_phys);
+    // ========== 第8步：检查分页状态 ==========
+    uint32_t cr0;
+    __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
     
-    /* 初始化内核堆（在高地址空间） */
-    uint32_t heap_start = 0xC0400000;  // 4MB后开始
-    uint32_t heap_size = 16 * 1024 * 1024;  // 16MB堆
+    if (cr0 & 0x80000000) {
+        serial_write_string("Paging is enabled\n");
+        kprintf("Paging is enabled, initializing VMM...\n");
+        vmm_init(kernel_end_phys);
+    } else {
+        serial_write_string("Paging is NOT enabled\n");
+        kprintf("Paging is NOT enabled - running in low address mode\n");
+    }
+    
+    // ========== 第9步：初始化堆 ==========
+    serial_write_string("Initializing heap...\n");
+    uint32_t heap_start = kernel_end_phys + 0x100000;
+    uint32_t heap_size = 16 * 1024 * 1024;
     kmalloc_init(heap_start, heap_size);
+    serial_write_string("Heap initialized\n");
     
     /* 初始化kmap（高端内存临时映射）*/
     extern void kmap_init(void);

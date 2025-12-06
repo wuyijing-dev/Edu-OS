@@ -54,8 +54,9 @@
  * =============================================================================
  */
 
-// 内核主函数
-void kernel_main(void);
+// 内核主函数（支持Multiboot2启动信息）
+struct multiboot_info;  /* Forward declaration */
+void kernel_main(uint32_t magic, struct multiboot_info *mbi);
 
 // 内核恐慌
 void panic(const char *msg) __attribute__((noreturn));

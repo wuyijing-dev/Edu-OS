@@ -70,13 +70,9 @@ int serial_received(uint16_t port);
 // 检查是否可以发送
 int serial_transmit_empty(uint16_t port);
 
-// 默认串口（COM1）的便捷函数
-static inline void serial_write(char c) {
-    serial_putc(COM1, c);
-}
-
-static inline void serial_print(const char *str) {
-    serial_puts(COM1, str);
-}
+// 默认串口（COM1）的便捷宏
+#define serial_write(c) serial_putc(COM1, c)
+#define serial_print(str) serial_puts(COM1, str)
+#define serial_write_string(str) serial_puts(COM1, str)
 
 #endif // SERIAL_H

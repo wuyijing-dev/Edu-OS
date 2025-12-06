@@ -1,54 +1,128 @@
 ; ===========================================================================
-; entry.asm - 内核入口点（高半核版本）
+; entry.asm - 内核入口点（GRUB2简化版）
 ; ===========================================================================
 ; 说明：
-;   - 内核运行在虚拟地址0xC0100000（3GB+1MB）
-;   - bootloader已经设置好分页并跳转到这里
-;   - 我们需要移除低端恒等映射，只保留高地址映射
+;   - 内核运行在物理地址0x100000（1MB）
+;   - 虚拟地址 = 物理地址（无高半核映射）
+;   - GRUB2直接加载到0x100000
 ; ===========================================================================
 
 [BITS 32]
 
 extern kernel_main
+extern kernel_load_end
+extern kernel_end
 global _start
 
 section .text
+align 4
+
+; ===========================================================================
+; Multiboot1 Header (for GRUB2) - Using AOUT_KLUDGE
+; ===========================================================================
+; 必须在内核的前8KB内，且对齐到4字节
+; 采用Linux的方法：使用MULTIBOOT_AOUT_KLUDGE标志明确指定加载地址
+multiboot_header:
+    ; Multiboot magic number
+    dd 0x1BADB002                   ; Multiboot magic
+    
+    ; Multiboot flags
+    ; Bit 0: all boot modules loaded on page boundaries
+    ; Bit 1: memory size parameters valid
+    ; Bit 16: load address fields valid (MULTIBOOT_AOUT_KLUDGE)
+    dd 0x00010003                   ; Flags: AOUT_KLUDGE + page align + memory info
+    
+    ; Checksum (magic + flags + checksum = 0)
+    dd -(0x1BADB002 + 0x00010003)   ; Checksum
+    
+    ; These fields are valid because MULTIBOOT_AOUT_KLUDGE is set
+    dd multiboot_header             ; header_addr (address of this header)
+    dd 0x00100000                   ; load_addr (where to load the kernel)
+    dd kernel_load_end              ; load_end_addr (end of loaded sections, excluding BSS)
+    dd kernel_end                   ; bss_end_addr (end of BSS)
+    dd _start                       ; entry_addr (entry point)
 
 _start:
-    ; 立即在VGA显示一个字符，证明内核入口被调用
-    ; 使用物理地址0xB8000（通过低端恒等映射）
-    mov dword [0xB8000], 0x0F4B0F4B  ; 'KK' 白字黑底
+    ; ========== 第1步：保存GRUB参数（最优先！） ==========
+    ; 在修改任何寄存器之前保存GRUB传入的参数
+    ; EAX = magic (0x2BADB002)
+    ; EBX = multiboot info pointer
+    mov ecx, eax                      ; 保存magic到ECX
+    mov edx, ebx                      ; 保存MBI指针到EDX
     
-    ; 设置段寄存器
-    mov ax, 0x10
-    mov ds, ax
-    mov es, ax
-    mov fs, ax
-    mov gs, ax
-    mov ss, ax
+    ; ========== 第2步：禁用分页 ==========
+    mov eax, cr0
+    and eax, ~0x80000000              ; 清除PG位（bit 31）
+    mov cr0, eax
     
-    ; 再显示一个字符，证明段寄存器设置成功
-    mov dword [0xB8004], 0x0F450F45  ; 'EE' 白字黑底
+    ; 刷新TLB
+    xor eax, eax
+    mov cr3, eax
     
-    ; 设置内核栈（使用内核BSS段中的栈空间）
-    mov esp, kernel_stack_top
+    ; ========== 第3步：初始化串口用于调试 ==========
+    ; 初始化COM1（端口0x3F8）
+    mov al, 0x80                      ; DLAB = 1
+    mov dx, 0x3FB                     ; Line Control Register
+    out dx, al
+    
+    mov al, 1                         ; 波特率分频器低字节（115200 baud）
+    mov dx, 0x3F8
+    out dx, al
+    
+    mov al, 0                         ; 波特率分频器高字节
+    mov dx, 0x3F9
+    out dx, al
+    
+    mov al, 0x03                      ; 8 bits, no parity, 1 stop bit
+    mov dx, 0x3FB
+    out dx, al
+    
+    ; ========== 第4步：通过串口输出启动信息 ==========
+    ; 发送'K'
+    mov al, 'K'
+    mov dx, 0x3F8
+    out dx, al
+    
+    ; 发送'K'
+    mov al, 'K'
+    
+    ; 发送'\n'
+    mov al, 0x0A
+    out dx, al
+    
+    ; ========== 第5步：不修改段寄存器 ==========
+    ; 保持GRUB2设置的段寄存器
+    ; 修改段寄存器可能导致异常（如果GRUB2的GDT无效）
+    ; 注释掉段寄存器设置
+    
+    ; ========== 第6步：设置栈 ==========
+    ; 使用更高的地址避免与内核代码冲突
+    mov esp, 0x00400000              ; 4MB处的栈
     mov ebp, esp
     
-    ; 显示第三个字符，证明栈设置成功
-    mov dword [0xB8008], 0x0F520F52  ; 'RR' 白字黑底
+    ; ========== 第7步：调用kernel_main ==========
+    ; 发送'C'表示即将调用kernel_main
+    mov al, 'C'
+    out dx, al
     
-    ; 清除EFLAGS
-    push 0
-    popfd
+    mov al, 0x0A
+    out dx, al
     
-    ; 跳过横幅，直接调用kernel_main
-    ; call display_kernel_banner
+    ; 按照C调用约定，参数从右到左压栈
+    push edx                          ; 推送multiboot info指针
+    push ecx                          ; 推送multiboot magic
     
-    ; 显示第四个字符，准备调用kernel_main
-    mov dword [0xB800C], 0x0F4E0F4E  ; 'NN' 白字黑底
-    
-    ; 调用C语言内核主函数
+    ; 调用kernel_main
     call kernel_main
+    
+    ; ========== 第8步：如果返回，显示错误 ==========
+    ; 发送'R'表示从kernel_main返回了
+    mov al, 'R'
+    mov dx, 0x3F8
+    out dx, al
+    
+    mov al, 0x0A
+    out dx, al
     
     ; 如果kernel_main返回，进入无限循环
 halt:

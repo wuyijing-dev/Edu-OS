@@ -150,6 +150,7 @@ ALL_KERNEL_O := $(KERNEL_ENTRY_O) $(INTERRUPTS_O) $(GDT_FLUSH_O) $(CONTEXT_SWITC
 KERNEL_ELF := $(BUILD_DIR)/kernel.elf
 KERNEL_BIN := $(BUILD_DIR)/kernel.bin
 OS_IMG := $(BUILD_DIR)/eduos.img
+OS_ISO := $(BUILD_DIR)/eduos.iso
 
 # 颜色
 RED := \033[0;31m
@@ -670,6 +671,45 @@ $(OS_IMG): $(BOOT_STAGE1_BIN) $(BOOT_STAGE2_BIN) $(KERNEL_BIN) | $(BUILD_DIR)
 	@echo -e "$(GREEN)=========================================$(NC)"
 
 # ===========================================================================
+# 创建GRUB2 ISO镜像
+# ===========================================================================
+$(OS_ISO): $(KERNEL_ELF) boot/grub.cfg | $(BUILD_DIR)
+	@echo -e "$(YELLOW)=========================================$(NC)"
+	@echo -e "$(YELLOW) 创建 GRUB2 ISO 镜像$(NC)"
+	@echo -e "$(YELLOW)=========================================$(NC)"
+	@ISO_TEMP=$$(mktemp -d); \
+	mkdir -p $$ISO_TEMP/boot/grub; \
+	cp $(KERNEL_ELF) $$ISO_TEMP/boot/kernel.elf; \
+	cp boot/grub.cfg $$ISO_TEMP/boot/grub/grub.cfg; \
+	echo -e "$(CYAN)ISO临时目录: $$ISO_TEMP$(NC)"; \
+	echo -e "$(CYAN)内核文件: $$ISO_TEMP/boot/kernel.elf$(NC)"; \
+	echo -e "$(CYAN)目录结构:$(NC)"; \
+	find $$ISO_TEMP -type f; \
+	if command -v grub-mkrescue >/dev/null 2>&1; then \
+		echo -e "$(CYAN)使用 grub-mkrescue 创建 ISO...$(NC)"; \
+		grub-mkrescue -o $@ $$ISO_TEMP 2>&1; \
+	else \
+		echo -e "$(RED)未找到 grub-mkrescue$(NC)"; \
+		rm -rf $$ISO_TEMP; \
+		exit 1; \
+	fi; \
+	if [ -f $@ ]; then \
+		iso_size=$$(stat -c%s $@); \
+		echo -e "$(GREEN)=========================================$(NC)"; \
+		echo -e "$(GREEN)✓ ISO 镜像创建成功$(NC)"; \
+		echo -e "$(CYAN)输出: $@$(NC)"; \
+		echo -e "$(CYAN)大小: $$iso_size 字节$(NC)"; \
+		echo -e "$(GREEN)=========================================$(NC)"; \
+		echo -e "$(CYAN)ISO内容检查:$(NC)"; \
+		file $@; \
+	else \
+		echo -e "$(RED)错误: 创建 ISO 镜像失败$(NC)"; \
+		rm -rf $$ISO_TEMP; \
+		exit 1; \
+	fi; \
+	rm -rf $$ISO_TEMP
+
+# ===========================================================================
 # 运行QEMU
 # ===========================================================================
 run: $(OS_IMG)
@@ -700,6 +740,22 @@ run: $(OS_IMG)
 			-device rtl8139,netdev=net0 \
 			-serial stdio -m 128M; \
 	fi
+
+# ===========================================================================
+# 使用GRUB2 ISO运行
+# ===========================================================================
+run-iso: $(OS_ISO)
+	@echo -e "$(YELLOW)=========================================$(NC)"
+	@echo -e "$(YELLOW) 启动 EduOS (GRUB2 ISO)$(NC)"
+	@echo -e "$(YELLOW)=========================================$(NC)"
+	@echo -e "$(CYAN)提示：使用GRUB2引导加载程序$(NC)"
+	@echo ""
+	$(QEMU) -cdrom $(OS_ISO) \
+		-boot d \
+		-vga std \
+		-netdev user,id=net0 \
+		-device rtl8139,netdev=net0 \
+		-serial stdio -m 128M
 
 # ===========================================================================
 # 调试模式
@@ -764,7 +820,8 @@ info:
 	@echo ""
 	@echo -e "$(YELLOW)编译命令:$(NC)"
 	@echo -e "  make        - 编译所有文件"
-	@echo -e "  make run    - 编译并运行"
+	@echo -e "  make run    - 编译并运行（使用自定义引导加载程序）"
+	@echo -e "  make run-iso- 编译并运行（使用GRUB2 ISO）"
 	@echo -e "  make debug  - 调试模式启动"
 	@echo -e "  make clean  - 清理构建文件"
 	@echo -e "  make info   - 显示本帮助"
@@ -775,4 +832,4 @@ help: info
 # ===========================================================================
 # 依赖关系
 # ===========================================================================
-.PHONY: all clean run debug help info
+.PHONY: all clean run run-iso debug help info

@@ -82,7 +82,7 @@ static void rtl8139_interrupt_handler(struct interrupt_frame *frame)
             
             if (rx_status & 0x01) {  /* 接收OK */
                 /* 分配sk_buff */
-                struct sk_buff *skb = alloc_skb(rx_size + 2);
+                struct sk_buff *skb = alloc_skb(rx_size + 2, 0);
                 if (skb) {
                     skb->dev = dev;
                     skb_reserve(skb, 2);  /* 16字节对齐 */
