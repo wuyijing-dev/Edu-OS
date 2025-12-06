@@ -50,14 +50,56 @@ _start:
     mov ecx, eax                      ; 保存magic到ECX
     mov edx, ebx                      ; 保存MBI指针到EDX
     
-    ; ========== 第2步：禁用分页 ==========
+    ; ========== 第2步：设置页表以启用分页并映射到高地址 ==========
+    ; 创建双映射：
+    ; - PD[0] 映射到页表 -> 虚拟0x00000000-0x003FFFFF = 物理0x00000000-0x003FFFFF
+    ; - PD[768] 映射到页表 -> 虚拟0xC0000000-0xC03FFFFF = 物理0x00000000-0x003FFFFF
+    ; 这样既支持低地址访问，也支持高地址访问
+    
+    ; 清空页目录（1024个条目）
+    mov edi, 0x9000
+    xor eax, eax
+    mov ecx, 1024
+    rep stosd
+    
+    ; 清空页表（1024个条目）
+    mov edi, 0xA000
+    xor eax, eax
+    mov ecx, 1024
+    rep stosd
+    
+    ; 设置PD[0] = 0xA000 | 0x03（低地址页表）
+    mov dword [0x9000], 0xA003
+    
+    ; 设置PD[768] = 0xA000 | 0x03（高地址页表，768 = 0xC0000000 / 0x400000）
+    mov dword [0x9000 + 768*4], 0xA003
+    
+    ; 设置页表项：恒等映射0-4MB的物理内存
+    mov edi, 0xA000
+    mov eax, 0x00000003              ; 物理地址0，可读写
+    mov ecx, 1024                    ; 1024个页表项 = 4MB
+    
+setup_page_table:
+    mov [edi], eax
+    add eax, 0x1000                  ; 下一个4KB页
+    add edi, 4
+    loop setup_page_table
+    
+    ; 设置CR3指向页目录
+    mov eax, 0x9000
+    mov cr3, eax
+    
+    ; 启用分页
     mov eax, cr0
-    and eax, ~0x80000000              ; 清除PG位（bit 31）
+    or eax, 0x80000000               ; 设置PG位
     mov cr0, eax
     
-    ; 刷新TLB
-    xor eax, eax
-    mov cr3, eax
+    ; 跳转到高地址继续执行
+    lea eax, [rel high_address_entry]
+    add eax, 0xC0000000              ; 转换到高地址
+    jmp eax
+
+high_address_entry:
     
     ; ========== 第3步：初始化串口用于调试 ==========
     ; 初始化COM1（端口0x3F8）

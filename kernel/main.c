@@ -190,17 +190,29 @@ void kernel_main(uint32_t magic, struct multiboot_info *mbi)
     pmm_init(total_memory, 0x100000, kernel_end_phys);
     serial_write_string("PMM initialized\n");
     
-    // ========== 第8步：检查分页状态 ==========
+    // ========== 第8步：检查分页状态和运行地址 ==========
     uint32_t cr0;
     __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
     
+    uint32_t current_addr = (uint32_t)&kernel_main;
+    
+    serial_write_string("Checking paging status...\n");
+    kprintf("Current address: 0x%x\n", current_addr);
+    
     if (cr0 & 0x80000000) {
         serial_write_string("Paging is enabled\n");
-        kprintf("Paging is enabled, initializing VMM...\n");
-        vmm_init(kernel_end_phys);
+        kprintf("Paging is enabled\n");
     } else {
         serial_write_string("Paging is NOT enabled\n");
-        kprintf("Paging is NOT enabled - running in low address mode\n");
+        kprintf("Paging is NOT enabled\n");
+    }
+    
+    if (current_addr >= 0xC0000000) {
+        serial_write_string("Running in HIGH address mode\n");
+        kprintf("Running in HIGH address mode - restoring all subsystems\n");
+    } else {
+        serial_write_string("Running in LOW address mode\n");
+        kprintf("Running in LOW address mode - using simplified initialization\n");
     }
     
     // ========== 第9步：初始化堆 ==========
@@ -209,46 +221,6 @@ void kernel_main(uint32_t magic, struct multiboot_info *mbi)
     uint32_t heap_size = 16 * 1024 * 1024;
     kmalloc_init(heap_start, heap_size);
     serial_write_string("Heap initialized\n");
-    
-    /* 初始化kmap（高端内存临时映射）*/
-    extern void kmap_init(void);
-    kmap_init();
-    
-    /* 初始化页面回收系统（LRU）*/
-    extern void page_reclaim_init(void);
-    page_reclaim_init();
-    
-    /* 初始化OOM killer */
-    extern void oom_init(void);
-    oom_init();
-    
-    /* 初始化页面缓存（Page Cache）*/
-    extern void page_cache_init(void);
-    page_cache_init();
-    
-    /* 初始化SWAP系统 */
-    extern int swap_init(void);
-    swap_init();
-    
-    /* 初始化消息队列系统 */
-    extern void mqueue_init(void);
-    mqueue_init();
-    
-    /* 初始化信号量系统 */
-    extern void semaphore_init(void);
-    semaphore_init();
-    
-    /* 初始化互斥锁系统 */
-    extern void mutex_init_system(void);
-    mutex_init_system();
-    
-    /* 初始化CFS调度器 */
-    extern void cfs_init(void);
-    cfs_init();
-    
-    /* 初始化实时调度器 */
-    extern void rt_sched_init(void);
-    rt_sched_init();
     
     /* 初始化/proc/schedstat - 通过procfs全局文件列表自动注册，无需手动初始化 */
     /* extern void proc_schedstat_init(void); */
